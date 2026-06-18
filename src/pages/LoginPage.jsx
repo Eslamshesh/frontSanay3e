@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import api from '../services/api';
 import { 
   Mail, Lock, Eye, EyeOff, User, Wrench, 
-  ArrowRight, Sparkles, CheckCircle, 
-  LogIn, Moon, Sun, Globe
+  CheckCircle, LogIn, Moon, Sun, Globe
 } from 'lucide-react';
 
 const LoginPage = () => {
-  const navigate = useNavigate();
   const { login } = useAuth();
   const { darkMode, toggleTheme } = useTheme();
   const [lang, setLang] = useState('ar');
@@ -66,9 +63,7 @@ const LoginPage = () => {
     passwordPlaceholder: lang === 'ar' ? '••••••••' : '••••••••',
     roleLabel: lang === 'ar' ? 'نوع الحساب' : 'Account Type',
     customer: lang === 'ar' ? 'عميل' : 'Customer',
-    customerDesc: lang === 'ar' ? 'أبحث عن خدمات' : 'Looking for services',
     craftsman: lang === 'ar' ? 'حرفي' : 'Craftsman',
-    craftsmanDesc: lang === 'ar' ? 'أقدم خدمات' : 'Providing services',
     rememberMe: lang === 'ar' ? 'تذكرني' : 'Remember me',
     forgotPassword: lang === 'ar' ? 'نسيت كلمة المرور؟' : 'Forgot password?',
     login: lang === 'ar' ? 'تسجيل الدخول' : 'Sign In',
@@ -94,58 +89,35 @@ const LoginPage = () => {
 
     setLoading(true);
 
-    try {
-      // Try API first
-      const result = await api.login(email, password, role);
-      if (result.token || result.success) {
-        setSuccessLogin(true);
-        // Save credentials
-        if (rememberMe) {
-          localStorage.setItem('rememberedEmail', email);
-          localStorage.setItem('rememberedRole', role);
-        }
-        setTimeout(() => {
-          login(email, password, role);
-          setLoading(false);
-        }, 1000);
-        return;
-      }
-    } catch {
-      // API failed, fallback to local
+    // ✅ استخدام login من AuthContext مباشرة
+    const result = await login(email, password);
+
+    if (!result.success) {
+      setError(result.message || t.invalidCredentials);
+      setLoading(false);
+      return;
     }
 
-    // Local auth fallback
-    setTimeout(() => {
-      // Save credentials
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', email);
-        localStorage.setItem('rememberedRole', role);
-      } else {
-        localStorage.removeItem('rememberedEmail');
-        localStorage.removeItem('rememberedRole');
-      }
+    // ✅ نجح - AuthContext هيتولى التوجيه تلقائياً
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email);
+      localStorage.setItem('rememberedRole', role);
+    } else {
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberedRole');
+    }
 
-      setSuccessLogin(true);
-      setTimeout(() => {
-        login(email, password, role);
-        setLoading(false);
-      }, 1000);
-    }, 800);
+    setSuccessLogin(true);
+    setLoading(false);
   };
 
   const handleDemoLogin = (demoRole) => {
     setRole(demoRole);
-    setEmail(demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com');
-    setPassword('123456');
-    
     setSuccessLogin(true);
-    setTimeout(() => {
-      login(
-        demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com',
-        '123456',
-        demoRole
-      );
-    }, 1000);
+    login(
+      demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com',
+      '123456'
+    );
   };
 
   // Dynamic colors
@@ -173,7 +145,6 @@ const LoginPage = () => {
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
         @keyframes successPulse { 0% { transform: scale(0.8); opacity: 0; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -283,7 +254,7 @@ const LoginPage = () => {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Role Selection - 2 options only */}
+            {/* Role Selection */}
             <div className="animate-fade-in-up delay-100">
               <label style={{ display: 'block', fontWeight: '600', color: textColor, marginBottom: '10px', fontSize: '0.85rem' }}>
                 {t.roleLabel}

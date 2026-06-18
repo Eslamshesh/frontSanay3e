@@ -1,554 +1,264 @@
-const BASE_URL = process.env.REACT_APP_API_URL || 'https://sanay3e-production.up.railway.app';
+// src/services/api.js
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000/api";
 
-// ==========================================
-// 🔑 Tokens
-// ==========================================
-
-const getUserToken = () => localStorage.getItem('token');
-const getAdminToken = () => localStorage.getItem('adminToken');
-
-// ==========================================
-// 📦 Headers
-// ==========================================
-
-const headers = (isFormData = false, isAdmin = false) => {
-  const token = isAdmin ? getAdminToken() : getUserToken();
-
-  const h = {
-    Accept: 'application/json',
+// ✅ مصلح: بنجيب الـ token من المكان الصح
+const getHeaders = () => {
+  const token = localStorage.getItem("token"); // ✅ مش من user object
+  return {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-
-  if (token) {
-    h['Authorization'] = `Bearer ${token}`;
-  }
-
-  if (!isFormData) {
-    h['Content-Type'] = 'application/json';
-  }
-
-  return h;
 };
 
-// ==========================================
-// ✅ Error Handling
-// ==========================================
-
-const handleResponse = async (response) => {
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const error = new Error(data.message || 'حدث خطأ');
-    error.status = response.status;
-    error.errors = data.errors || {};
-    throw error;
+// ✅ helper للتعامل مع الـ response وأخطاء الـ server
+const handleResponse = async (res) => {
+  const data = await res.json();
+  if (!res.ok) {
+    // Laravel بيرجع errors في data.message أو data.errors
+    const message =
+      data.message ||
+      (data.errors ? Object.values(data.errors).flat().join(' | ') : 'حدث خطأ');
+    throw new Error(message);
   }
-
   return data;
 };
 
-// ==========================================
-// 🌐 Request Helper
-// ==========================================
-
-const request = async (url, options = {}) => {
-  const response = await fetch(`${BASE_URL}${url}`, options);
-  return handleResponse(response);
-};
-
-// ==========================================
-// 🚀 API
-// ==========================================
-
 const api = {
-  // ==========================================
-  // 🔑 USER AUTH
-  // ==========================================
-
+  // ===== AUTH =====
   login: async (email, password) => {
-    const data = await request('/auth/login', {
-      method: 'POST',
-      headers: headers(),
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: getHeaders(),
       body: JSON.stringify({ email, password }),
     });
-
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('userRole', data.user?.role || 'customer');
-    }
-
-    return data;
+    return handleResponse(res); // ✅ بيرجع { token, user } من Laravel
   },
 
-  registerClient: async (userData) => {
-    const data = await request('/auth/register/client', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify(userData),
+  registerClient: async (data) => {
+    const res = await fetch(`${API_URL}/auth/register/client`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
-
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('userRole', data.user?.role || 'customer');
-    }
-
-    return data;
+    return handleResponse(res);
   },
 
-  registerCraftsman: async (formData) => {
-    const data = await request('/auth/register/craftsman', {
-      method: 'POST',
-      headers: headers(true),
-      body: formData,
+  registerCraftsman: async (data) => {
+    const res = await fetch(`${API_URL}/auth/register/craftsman`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
-
-    if (data.token) {
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('userRole', 'craftsman');
-    }
-
-    return data;
+    return handleResponse(res);
   },
 
   logout: async () => {
-    try {
-      await request('/auth/logout', {
-        method: 'DELETE',
-        headers: headers(),
-      });
-    } catch (e) {
-      console.log(e);
-    } finally {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('userRole');
-    }
-  },
-
-  getCurrentUser: async () => {
-    return request('/auth/me', {
-      headers: headers(),
+    const res = await fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  updateProfile: async (formData) => {
-    return request('/auth/update-profile', {
-      method: 'POST',
-      headers: headers(true),
-      body: formData,
+  getMe: async () => {
+    const res = await fetch(`${API_URL}/auth/me`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  changePassword: async (passwordData) => {
-    return request('/auth/change-password', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify(passwordData),
+  updateProfile: async (data) => {
+    const res = await fetch(`${API_URL}/auth/profile`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
+    return handleResponse(res);
   },
 
-  // ==========================================
-  // 🛡️ ADMIN AUTH
-  // ==========================================
-
-  adminLogin: async (email, password) => {
-    const data = await request('/auth/admin/login', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ email, password }),
+  // ===== CRAFTSMEN =====
+  getCraftsmen: async () => {
+    const res = await fetch(`${API_URL}/craftsmen`, {
+      headers: getHeaders(),
     });
-
-    if (data.token) {
-      localStorage.setItem('adminToken', data.token);
-      localStorage.setItem('admin', JSON.stringify(data.user));
-    }
-
-    return data;
-  },
-
-  adminLogout: async () => {
-    try {
-      await request('/auth/logout', {
-        method: 'DELETE',
-        headers: headers(false, true),
-      });
-    } catch (e) {
-      console.log(e);
-    } finally {
-      localStorage.removeItem('adminToken');
-      localStorage.removeItem('admin');
-    }
-  },
-
-  // ==========================================
-  // 🌐 PUBLIC
-  // ==========================================
-
-  searchCraftsmen: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/craftsmen.home.search${query ? `?${query}` : ''}`);
+    return handleResponse(res);
   },
 
   getCraftsman: async (id) => {
-    return request(`/craftsmen.home.show/${id}`);
-  },
-
-  getCraftsmen: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/crafts${query ? `?${query}` : ''}`);
-  },
-
-  // ==========================================
-  // 👤 CLIENT BOOKINGS
-  // ==========================================
-
-  getCustomerBookings: async () => {
-    return request('/bookings', {
-      headers: headers(),
+    const res = await fetch(`${API_URL}/craftsmen/${id}`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  createBooking: async (bookingData) => {
-    return request('/bookings.store', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify(bookingData),
+  getFeaturedCraftsmen: async () => {
+    const res = await fetch(`${API_URL}/craftsmen/featured`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  getBookingDetails: async (id) => {
-    return request(`/bookings.show/${id}`, {
-      headers: headers(),
+  // ===== BOOKINGS =====
+  createBooking: async (data) => {
+    const res = await fetch(`${API_URL}/bookings`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
+    return handleResponse(res);
   },
 
-  cancelBooking: async (id, reason = '') => {
-    return request(`/bookings.cancel/${id}`, {
-      method: 'DELETE',
-      headers: headers(),
-      body: JSON.stringify({ reason }),
+  getMyBookings: async () => {
+    const res = await fetch(`${API_URL}/bookings`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  addReview: async (bookingId, reviewData) => {
-    return request(`/bookings.addreview/${bookingId}/review`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify(reviewData),
+  getBooking: async (id) => {
+    const res = await fetch(`${API_URL}/bookings/${id}`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  // ==========================================
-  // 👤 CLIENT SERVICE POSTS
-  // ==========================================
-
-  getMyPosts: async () => {
-    return request('/my-posts', {
-      headers: headers(),
+  updateBookingStatus: async (id, status) => {
+    const res = await fetch(`${API_URL}/bookings/${id}/status`, {
+      method: "PATCH",
+      headers: getHeaders(),
+      body: JSON.stringify({ status }),
     });
+    return handleResponse(res);
   },
 
-  createServicePost: async (formData) => {
-    return request('/service-posts.store', {
-      method: 'POST',
-      headers: headers(true),
-      body: formData,
+  cancelBooking: async (id) => {
+    const res = await fetch(`${API_URL}/bookings/${id}`, {
+      method: "DELETE",
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  getServicePost: async (id) => {
-    return request(`/service-posts/${id}`, {
-      headers: headers(),
+  addReview: async (bookingId, data) => {
+    const res = await fetch(`${API_URL}/bookings/${bookingId}/review`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     });
+    return handleResponse(res);
+  },
+
+  // ===== SERVICE POSTS =====
+  getServicePosts: async () => {
+    const res = await fetch(`${API_URL}/service-posts`, {
+      headers: getHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  createServicePost: async (data) => {
+    const res = await fetch(`${API_URL}/service-posts`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
   },
 
   deleteServicePost: async (id) => {
-    return request(`/service-posts.destroy/${id}`, {
-      method: 'DELETE',
-      headers: headers(),
+    const res = await fetch(`${API_URL}/service-posts/${id}`, {
+      method: "DELETE",
+      headers: getHeaders(),
     });
-  },
-
-  updateResponse: async (postId, responseId, data) => {
-    return request(`/service-posts/${postId}/responses/${responseId}`, {
-      method: 'PATCH',
-      headers: headers(),
-      body: JSON.stringify(data),
-    });
-  },
-
-  // ==========================================
-  // 🔧 CRAFTSMAN
-  // ==========================================
-
-  getCraftsmanServicePosts: async () => {
-    return request('/craftsman/service-posts', {
-      headers: headers(),
-    });
+    return handleResponse(res);
   },
 
   respondToServicePost: async (postId, data) => {
-    return request(`/craftsman/service-posts/${postId}/respond`, {
-      method: 'POST',
-      headers: headers(),
+    const res = await fetch(`${API_URL}/service-posts/${postId}/respond`, {
+      method: "POST",
+      headers: getHeaders(),
       body: JSON.stringify(data),
     });
+    return handleResponse(res);
   },
 
-  getCraftsmanBookings: async () => {
-    return request('/craftsman/bookings', {
-      headers: headers(),
-    });
-  },
-
-  updateBookingStatus: async (id, status, reason = null) => {
-    return request(`/craftsman/bookings/${id}/status`, {
-      method: 'PATCH',
-      headers: headers(),
-      body: JSON.stringify({ status, reason }),
-    });
-  },
-
-  acceptBooking: async (id) => {
-    return api.updateBookingStatus(id, 'confirmed');
-  },
-
-  rejectBooking: async (id, reason = '') => {
-    return api.updateBookingStatus(id, 'rejected', reason);
-  },
-
-  getCraftsmanStats: async () => {
-    return request('/craftsman/stats', {
-      headers: headers(),
-    });
-  },
-
-  getCraftsmanProfile: async () => {
-    return request('/craftsman/profile', {
-      headers: headers(),
-    });
-  },
-
-  updateCraftsmanProfile: async (formData) => {
-    return request('/craftsman/profile', {
-      method: 'POST',
-      headers: headers(true),
-      body: formData,
-    });
-  },
-
-  // ==========================================
-  // 🛡️ ADMIN
-  // ==========================================
-
-  getAdminDashboard: async () => {
-    return request('/admin/dashboard', {
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminStats: async () => {
-    return api.getAdminDashboard();
-  },
-
-  getAdminCraftsmen: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/admin/craftsmen${query ? `?${query}` : ''}`, {
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminCraftsmanDetails: async (id) => {
-    return request(`/admin/craftsmen/${id}`, {
-      headers: headers(false, true),
-    });
-  },
-
-  // ✅ متوافق مع PUT في الباك إند
-  approveCraftsman: async (id) => {
-    return request(`/admin/craftsmen/${id}/approve`, {
-      method: 'PUT',
-      headers: headers(false, true),
-    });
-  },
-
-  // ✅ متوافق مع PUT في الباك إند
-  rejectCraftsman: async (id, reason = '') => {
-    return request(`/admin/craftsmen/${id}/reject`, {
-      method: 'PUT',
-      headers: headers(false, true),
-      body: JSON.stringify({ reason }),
-    });
-  },
-
-  getAdminBookings: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/admin/bookings${query ? `?${query}` : ''}`, {
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminPosts: async (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/admin/posts${query ? `?${query}` : ''}`, {
-      headers: headers(false, true),
-    });
-  },
-
-  togglePostVisibility: async (id) => {
-    return request(`/admin/posts/${id}/toggle-visibility`, {
-      method: 'PATCH',
-      headers: headers(false, true),
-    });
-  },
-
-  deleteAdminPost: async (id) => {
-    return request(`/admin/posts.delete/${id}`, {
-      method: 'DELETE',
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminCrafts: async () => {
-    return request('/admin/crafts', {
-      headers: headers(false, true),
-    });
-  },
-
-  createCraft: async (data) => {
-    return request('/admin/crafts.store', {
-      method: 'POST',
-      headers: headers(false, true),
-      body: JSON.stringify(data),
-    });
-  },
-
-  updateCraft: async (id, data) => {
-    return request(`/admin/crafts.update/${id}`, {
-      method: 'POST',
-      headers: headers(false, true),
-      body: JSON.stringify(data),
-    });
-  },
-
-  deleteCraft: async (id) => {
-    return request(`/admin/crafts.delete/${id}`, {
-      method: 'DELETE',
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminReviews: async () => {
-    return request('/admin/reviews', {
-      headers: headers(false, true),
-    });
-  },
-
-  toggleReviewVisibility: async (id) => {
-    return request(`/admin/reviews/${id}/toggle-visibility`, {
-      method: 'PATCH',
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminAdvancedStats: async () => {
-    return request('/admin/stats', {
-      headers: headers(false, true),
-    });
-  },
-
-  getAdminSettings: async () => {
-    return request('/admin/settings', {
-      headers: headers(false, true),
-    });
-  },
-
-  updateAdminSettings: async (settings) => {
-    return request('/admin/settings', {
-      method: 'PUT',
-      headers: headers(false, true),
-      body: JSON.stringify(settings),
-    });
-  },
-
-  impersonateUser: async (id) => {
-    return request(`/admin/users/${id}/impersonate`, {
-      method: 'POST',
-      headers: headers(false, true),
-    });
-  },
-
-  // ==========================================
-  // 🔔 NOTIFICATIONS
-  // ==========================================
-
+  // ===== NOTIFICATIONS =====
   getNotifications: async () => {
-    return request('/notifications', {
-      headers: headers(),
+    const res = await fetch(`${API_URL}/notifications`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  getUnreadNotificationsCount: async () => {
-    return request('/notifications/count', {
-      headers: headers(),
+  getUnreadCount: async () => {
+    const res = await fetch(`${API_URL}/notifications/count`, {
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  markNotificationAsRead: async (id) => {
-    return request(`/notifications/${id}/read`, {
-      method: 'PATCH',
-      headers: headers(),
+  markNotificationRead: async (id) => {
+    const res = await fetch(`${API_URL}/notifications/${id}/read`, {
+      method: "PATCH",
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  markAllNotificationsAsRead: async () => {
-    return request('/notifications/read-all', {
-      method: 'PATCH',
-      headers: headers(),
+  markAllNotificationsRead: async () => {
+    const res = await fetch(`${API_URL}/notifications/read-all`, {
+      method: "POST",
+      headers: getHeaders(),
     });
+    return handleResponse(res);
   },
 
-  // ==========================================
-  // 📁 UPLOAD
-  // ==========================================
-
-  uploadImage: async (file, type = 'post_image') => {
+  // ===== UPLOAD =====
+  // ✅ مصلح: token بيجي من localStorage.getItem('token') مش من user object
+  uploadImage: async (file) => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', type);
-
-    return request('/upload/image', {
-      method: 'POST',
-      headers: headers(true),
+    formData.append("image", file);
+    const token = localStorage.getItem("token"); // ✅
+    const res = await fetch(`${API_URL}/upload/image`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
+    return handleResponse(res);
   },
 
-  uploadMultipleImages: async (files, type = 'portfolio') => {
+  uploadMultiple: async (files) => {
     const formData = new FormData();
-    files.forEach((file, index) => {
-      formData.append(`files[${index}]`, file);
-    });
-    formData.append('type', type);
-
-    return request('/upload/multiple', {
-      method: 'POST',
-      headers: headers(true),
+    files.forEach((file) => formData.append("images[]", file));
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_URL}/upload/multiple`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
+    return handleResponse(res);
   },
 
   uploadDocument: async (file) => {
     const formData = new FormData();
-    formData.append('file', file);
-
-    return request('/upload/document', {
-      method: 'POST',
-      headers: headers(true),
+    formData.append("document", file);
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_URL}/upload/document`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: formData,
     });
+    return handleResponse(res);
   },
 };
 

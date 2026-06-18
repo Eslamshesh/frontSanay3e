@@ -4,10 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
 import api from '../../services/api';
-import { Wrench, Moon, Sun, Globe, Download, LogOut, Shield, Bell, Search, Star } from 'lucide-react';
+import { Wrench, Moon, Sun, Globe, Download, LogOut, Bell, Search, Star } from 'lucide-react';
 
 const Header = () => {
-const { user, logout, isAuthenticated, isCustomer, isCraftsman, isAdmin } = useAuth();  const { darkMode, toggleTheme } = useTheme();
+  const { user, logout, isAuthenticated, isCustomer, isCraftsman } = useAuth();
+  const { darkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
   const [lang, setLang] = useState('ar');
@@ -16,8 +17,6 @@ const { user, logout, isAuthenticated, isCustomer, isCraftsman, isAdmin } = useA
   const [showInstall, setShowInstall] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  // ✅ كل الـ Hooks لازم تكون قبل أي return
 
   // Scroll detection
   useEffect(() => {
@@ -68,9 +67,9 @@ const { user, logout, isAuthenticated, isCustomer, isCraftsman, isAdmin } = useA
     }
   }, [isAuthenticated, user]);
 
-  // ✅ كل الـ Hooks خلصت - دلوقتي نقدر نعمل return null
+  // ✅ مختفي في صفحات الأدمن
+  if (location.pathname.startsWith('/admin')) return null;
 
-if (location.pathname.startsWith('/admin')) return null;
   const toggleLang = () => {
     const newLang = lang === 'ar' ? 'en' : 'ar';
     setLang(newLang);
@@ -105,7 +104,6 @@ if (location.pathname.startsWith('/admin')) return null;
     install: lang === 'ar' ? 'تثبيت التطبيق' : 'Install App',
     login: lang === 'ar' ? 'دخول' : 'Login',
     register: lang === 'ar' ? 'حساب جديد' : 'Register',
-    adminLogin: lang === 'ar' ? 'دخول المشرف' : 'Admin Login',
     tagline: lang === 'ar' ? 'خدمات منزلية موثوقة' : 'Trusted Home Services',
     profile: lang === 'ar' ? 'الملف الشخصي' : 'Profile',
     logout: lang === 'ar' ? 'خروج' : 'Logout',
@@ -175,16 +173,10 @@ if (location.pathname.startsWith('/admin')) return null;
             </button>
           )}
 
-           {!isAuthenticated && (
-            <Link to="/admin/login" style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${borderColor}`, fontSize: '12px', color: textMuted, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px', fontFamily: "'Cairo', sans-serif" }}>
-              <Shield size={12} />{t.adminLogin}
-            </Link>
-          )}
-
           <div style={{ width: '1px', height: '24px', background: borderColor, margin: '0 4px' }} />
 
-          {isAuthenticated && !isAdmin ? (
-  <>
+          {isAuthenticated ? (
+            <>
               <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.8rem' }}>
                   {user?.name?.charAt(0) || 'م'}
