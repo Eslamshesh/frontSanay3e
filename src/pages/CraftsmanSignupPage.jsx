@@ -1,7 +1,9 @@
+// src/pages/CraftsmanSignupPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 import { 
   MapPin, Navigation, User, Mail, Phone, MessageCircle,
   Lock, Eye, EyeOff, Wrench, Shield, Camera, ChevronDown,
@@ -44,6 +46,7 @@ const CraftsmanSignupPage = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locationMethod, setLocationMethod] = useState('manual');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
@@ -119,6 +122,10 @@ const CraftsmanSignupPage = () => {
     back: lang === 'ar' ? 'السابق' : 'Back',
     required: lang === 'ar' ? '*' : '*',
     steps: lang === 'ar' ? ['المعلومات الشخصية', 'الموقع والمهنة', 'تأكيد الحساب'] : ['Personal Info', 'Location & Profession', 'Account Security'],
+    creating: lang === 'ar' ? 'جاري إنشاء الحساب...' : 'Creating account...',
+    submitting: lang === 'ar' ? 'جاري الإرسال...' : 'Submitting...',
+    // ✅ إضافة ترجمة لرسالة التوجيه
+    redirecting: lang === 'ar' ? 'جاري التوجيه...' : 'Redirecting...',
   };
 
   const handleChange = (e) => {
@@ -210,6 +217,11 @@ const CraftsmanSignupPage = () => {
       if (!formData.city) newErrors.city = lang === 'ar' ? 'اختر المدينة' : 'Select city';
       if (!formData.profession && !showCustomInput) newErrors.profession = lang === 'ar' ? 'اختر المهنة' : 'Select profession';
       if (showCustomInput && !formData.customProfession.trim()) newErrors.customProfession = lang === 'ar' ? 'مطلوب' : 'Required';
+      // ✅ إضافة التحقق من الصورة في validateStep
+      if (!formData.idImage) {
+        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية للمتابعة' : '⚠️ Please upload ID photo to continue');
+        return false;
+      }
     }
 
     if (stepNumber === 3) {
@@ -222,7 +234,16 @@ const CraftsmanSignupPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // ✅ handleNext المعدل - يتحقق من الصورة في الخطوة 2
   const handleNext = () => {
+    // ✅ التحقق من الصورة في الخطوة 2
+    if (step === 2) {
+      if (!formData.idImage) {
+        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية للمتابعة' : '⚠️ Please upload ID photo to continue');
+        return;
+      }
+    }
+    
     if (validateStep(step)) {
       setStep(prev => prev + 1);
       setError('');
@@ -234,9 +255,11 @@ const CraftsmanSignupPage = () => {
     setError('');
   };
 
-  const handleSubmit = (e) => {
+  // ✅ تسجيل حرفي - باستخدام api.registerCraftsman
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (!validateStep(3)) return;
 
@@ -247,35 +270,48 @@ const CraftsmanSignupPage = () => {
       return;
     }
 
-    if (showCustomInput) {
-      const requests = JSON.parse(localStorage.getItem('profession_requests') || '[]');
-      requests.push({
-        id: Date.now(),
-        craftsmanName: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
-        requestedProfession: formData.customProfession,
-        status: 'pending',
-        date: new Date().toISOString().split('T')[0]
-      });
-      localStorage.setItem('profession_requests', JSON.stringify(requests));
-      setSuccess(lang === 'ar' ? 'تم إرسال طلبك. المهنة الجديدة ستظهر بعد موافقة المشرف.' : 'Your request has been sent. New profession will appear after admin approval.');
+    // ✅ الصورة موجودة (تم التحقق منها في step 2)
+    if (!formData.idImage) {
+      setError(lang === 'ar' ? 'يرجى رفع صورة الهوية' : 'Please upload ID photo');
+      return;
     }
 
-    // Save location data
-    const userData = {
-      ...formData,
-      profession: finalProfession,
-      location: {
-        latitude: formData.latitude,
-        longitude: formData.longitude,
-        city: formData.city,
-        district: formData.district,
-        detectionMethod: locationMethod,
-      },
-    };
+    setIsSubmitting(true);
 
-    localStorage.setItem('craftsmanData', JSON.stringify(userData));
-    login(formData.email, formData.password, 'craftsman');
+    try {
+      // ✅ بناء FormData للباك
+      const formDataToSend = new FormData();
+      formDataToSend.append('first_name', formData.firstName);
+      formDataToSend.append('last_name', formData.lastName);
+      formDataToSend.append('email', formData.email);
+      formDataToSend.append('phone', formData.phone);
+      formDataToSend.append('city', formData.city);
+      formDataToSend.append('national_id_front', formData.idImage);
+      formDataToSend.append('national_id_back', formData.idImage); // مؤقتاً نفس الصورة
+      formDataToSend.append('craft_ids[]', 1); // مؤقتاً ID 1
+
+      const data = await api.registerCraftsman(formDataToSend);
+
+      setSuccess(data.message || 'تم إرسال الطلب بنجاح');
+      
+      // ✅ حفظ الإيميل للتأكيد
+      localStorage.setItem('pendingVerificationEmail', formData.email);
+      
+      // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
+      setTimeout(() => {
+        navigate('/verify-email');
+      }, 2000);
+
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else {
+        setError(err.message || 'حدث خطأ في إنشاء الحساب');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Dynamic colors
@@ -289,6 +325,20 @@ const CraftsmanSignupPage = () => {
     ? 'linear-gradient(135deg, #1e1b4b, #312e81)'
     : 'linear-gradient(135deg, #1e40af, #3b82f6)';
 
+  const inputStyle = (fieldError) => ({
+    width: '100%',
+    padding: '12px 16px',
+    border: `2px solid ${fieldError ? '#dc2626' : borderColor}`,
+    borderRadius: '10px',
+    fontSize: '0.95rem',
+    color: textColor,
+    background: inputBg,
+    outline: 'none',
+    fontFamily: "'Cairo', sans-serif",
+    transition: 'all 0.3s ease',
+    textAlign: 'right',
+  });
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -298,6 +348,7 @@ const CraftsmanSignupPage = () => {
       justifyContent: 'center',
       padding: '40px 24px',
       fontFamily: "'Cairo', sans-serif",
+      direction: lang === 'ar' ? 'rtl' : 'ltr',
     }}>
       <style>{`
         @keyframes fadeInUp {
@@ -399,14 +450,6 @@ const CraftsmanSignupPage = () => {
               }}>
                 {s < step ? <CheckCircle size={18} /> : s}
               </div>
-              <span style={{
-                fontSize: '0.75rem',
-                color: s <= step ? '#3b82f6' : textSecondary,
-                fontWeight: s === step ? 700 : 400,
-                display: 'none',
-              }}>
-                {t.steps[s - 1]}
-              </span>
             </React.Fragment>
           ))}
         </div>
@@ -497,7 +540,7 @@ const CraftsmanSignupPage = () => {
                     name="firstName"
                     value={formData.firstName}
                     onChange={handleChange}
-                    style={inputStyle(inputBg, borderColor, textColor, errors.firstName)}
+                    style={inputStyle(errors.firstName)}
                     placeholder={lang === 'ar' ? 'محمد' : 'Mohamed'}
                   />
                   {errors.firstName && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.firstName}</span>}
@@ -511,7 +554,7 @@ const CraftsmanSignupPage = () => {
                     name="lastName"
                     value={formData.lastName}
                     onChange={handleChange}
-                    style={inputStyle(inputBg, borderColor, textColor, errors.lastName)}
+                    style={inputStyle(errors.lastName)}
                     placeholder={lang === 'ar' ? 'علي' : 'Ali'}
                   />
                   {errors.lastName && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.lastName}</span>}
@@ -529,7 +572,7 @@ const CraftsmanSignupPage = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    style={{ ...inputStyle(inputBg, borderColor, textColor, errors.email), paddingRight: '44px' }}
+                    style={{ ...inputStyle(errors.email), paddingRight: '44px' }}
                     placeholder="craftsman@example.com"
                   />
                 </div>
@@ -548,7 +591,7 @@ const CraftsmanSignupPage = () => {
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
-                      style={{ ...inputStyle(inputBg, borderColor, textColor), paddingRight: '44px' }}
+                      style={{ ...inputStyle(), paddingRight: '44px' }}
                       placeholder="01xxxxxxxxx"
                     />
                   </div>
@@ -564,7 +607,7 @@ const CraftsmanSignupPage = () => {
                       name="whatsapp"
                       value={formData.whatsapp}
                       onChange={handleChange}
-                      style={{ ...inputStyle(inputBg, borderColor, textColor), paddingRight: '44px' }}
+                      style={{ ...inputStyle(), paddingRight: '44px' }}
                       placeholder="01xxxxxxxxx"
                     />
                   </div>
@@ -589,14 +632,6 @@ const CraftsmanSignupPage = () => {
                   transition: 'all 0.3s ease',
                   boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
                 }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 4px 16px rgba(59,130,246,0.3)';
-                }}
               >
                 {t.next}
               </button>
@@ -606,8 +641,6 @@ const CraftsmanSignupPage = () => {
           {/* Step 2: Location & Profession */}
           {step === 2 && (
             <div className="animate-fade-in-up">
-              
-              {/* Location Section */}
               <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#3b82f6', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <MapPin size={20} />
                 {t.locationInfo}
@@ -719,7 +752,7 @@ const CraftsmanSignupPage = () => {
                         value={formData.city}
                         onChange={handleChange}
                         style={{
-                          ...inputStyle(inputBg, borderColor, textColor, errors.city),
+                          ...inputStyle(errors.city),
                           paddingRight: '44px',
                           appearance: 'none',
                           cursor: 'pointer',
@@ -745,7 +778,7 @@ const CraftsmanSignupPage = () => {
                         name="district"
                         value={formData.district}
                         onChange={handleChange}
-                        style={{ ...inputStyle(inputBg, borderColor, textColor), paddingRight: '44px' }}
+                        style={{ ...inputStyle(), paddingRight: '44px' }}
                         placeholder={lang === 'ar' ? 'مثال: مدينة نصر' : 'Ex: Nasr City'}
                       />
                     </div>
@@ -767,7 +800,7 @@ const CraftsmanSignupPage = () => {
                     onChange={handleChange}
                     value={formData.profession}
                     style={{
-                      ...inputStyle(inputBg, borderColor, textColor, errors.profession),
+                      ...inputStyle(errors.profession),
                       paddingRight: '44px',
                       appearance: 'none',
                       cursor: 'pointer',
@@ -800,7 +833,7 @@ const CraftsmanSignupPage = () => {
                     value={formData.customProfession}
                     onChange={handleChange}
                     style={{
-                      ...inputStyle('white', '#3b82f6', '#0f172a', errors.customProfession),
+                      ...inputStyle(errors.customProfession),
                       background: 'white',
                     }}
                     placeholder={lang === 'ar' ? 'أدخل اسم المهنة الجديدة' : 'Enter new profession name'}
@@ -823,12 +856,6 @@ const CraftsmanSignupPage = () => {
                   transition: 'all 0.3s ease',
                   background: formData.idImagePreview ? 'rgba(5,150,105,0.05)' : (darkMode ? '#0f172a' : '#f8fafc'),
                   marginBottom: '8px',
-                }}
-                onMouseEnter={(e) => {
-                  if (!formData.idImagePreview) e.target.style.borderColor = '#3b82f6';
-                }}
-                onMouseLeave={(e) => {
-                  if (!formData.idImagePreview) e.target.style.borderColor = borderColor;
                 }}
               >
                 {formData.idImagePreview ? (
@@ -913,7 +940,7 @@ const CraftsmanSignupPage = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    style={{ ...inputStyle(inputBg, borderColor, textColor, errors.password), paddingRight: '44px', paddingLeft: '44px' }}
+                    style={{ ...inputStyle(errors.password), paddingRight: '44px', paddingLeft: '44px' }}
                     placeholder="••••••••"
                   />
                   <button
@@ -947,7 +974,7 @@ const CraftsmanSignupPage = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    style={{ ...inputStyle(inputBg, borderColor, textColor, errors.confirmPassword), paddingRight: '44px', paddingLeft: '44px' }}
+                    style={{ ...inputStyle(errors.confirmPassword), paddingRight: '44px', paddingLeft: '44px' }}
                     placeholder="••••••••"
                   />
                   <button
@@ -992,35 +1019,38 @@ const CraftsmanSignupPage = () => {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{
                     flex: 2,
                     padding: '14px',
                     borderRadius: '12px',
-                    background: gradientBg,
+                    background: isSubmitting ? '#94a3b8' : gradientBg,
                     color: 'white',
                     border: 'none',
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     fontWeight: 700,
                     fontSize: '1rem',
                     fontFamily: "'Cairo', sans-serif",
                     transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+                    boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.5)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 4px 16px rgba(59,130,246,0.3)';
+                    opacity: isSubmitting ? 0.7 : 1,
                   }}
                 >
-                  <Sparkles size={18} />
-                  {t.submit}
+                  {isSubmitting ? (
+                    <>
+                      <Loader size={18} className="animate-spin" />
+                      {t.creating}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={18} />
+                      {t.submit}
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1048,20 +1078,5 @@ const CraftsmanSignupPage = () => {
     </div>
   );
 };
-
-// Helper: Input styles
-const inputStyle = (bg, border, color, error) => ({
-  width: '100%',
-  padding: '12px 16px',
-  border: `2px solid ${error ? '#dc2626' : border}`,
-  borderRadius: '10px',
-  fontSize: '0.95rem',
-  color: color,
-  background: bg,
-  outline: 'none',
-  fontFamily: "'Cairo', sans-serif",
-  transition: 'all 0.3s ease',
-  textAlign: 'right',
-});
 
 export default CraftsmanSignupPage;

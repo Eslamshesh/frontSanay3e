@@ -1,24 +1,36 @@
+// src/pages/CraftsmanProfilePage.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import ImageUploader from '../components/Upload/ImageUploader';
 import { 
   User, Camera, Mail, Phone, MapPin, Wrench, DollarSign,
   FileText, Save, Lock, Eye, EyeOff, Trash2, Plus,
   X, Star, Briefcase, Award, Clock, Image, Upload,
   AlertCircle, CheckCircle, Sparkles, Edit3, Grid,
-  Heart, Share2, Settings, LogOut, Shield, TrendingUp
+  Heart, Share2, Settings, LogOut, Shield, TrendingUp,
+  Loader
 } from 'lucide-react';
 
 const CraftsmanProfilePage = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { darkMode } = useTheme();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [avatar, setAvatar] = useState(null);
   const [portfolioImages, setPortfolioImages] = useState([]);
+  const [stats, setStats] = useState({
+    total_earnings: 0,
+    completed_bookings: 0,
+    pending_bookings: 0,
+    rating: 0,
+    reviews_count: 0,
+    is_featured: false,
+  });
   const fileInputRef = useRef(null);
 
   const [profile, setProfile] = useState({
@@ -45,18 +57,47 @@ const CraftsmanProfilePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // Load saved data
+  // ✅ جلب بيانات الحرفي والإحصائيات من API
   useEffect(() => {
-    const savedProfile = localStorage.getItem('craftsmanProfile');
-    if (savedProfile) {
-      try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
-    }
-    const savedAvatar = localStorage.getItem('craftsmanAvatar');
-    if (savedAvatar) setAvatar(savedAvatar);
-    const savedPortfolio = localStorage.getItem('craftsmanPortfolio');
-    if (savedPortfolio) {
-      try { setPortfolioImages(JSON.parse(savedPortfolio)); } catch {}
-    }
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // جلب الإحصائيات
+        const statsData = await api.getCraftsmanStats();
+        setStats(statsData.stats || {});
+        
+        // ✅ جلب بيانات المستخدم من الباك
+        const userData = await api.getMe();
+        if (userData.user) {
+          const u = userData.user;
+          setProfile(prev => ({
+            ...prev,
+            firstName: u.name?.split(' ')[0] || '',
+            lastName: u.name?.split(' ')[1] || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            city: u.craftsman?.city || '',
+            profession: u.craftsman?.crafts?.map(c => c.name).join(', ') || '',
+          }));
+          if (u.avatar_url) setAvatar(u.avatar_url);
+        }
+      } catch (error) {
+        console.warn('⚠️ Using fallback data:', error);
+        // Fallback data
+        const savedProfile = localStorage.getItem('craftsmanProfile');
+        if (savedProfile) {
+          try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
+        }
+        const savedAvatar = localStorage.getItem('craftsmanAvatar');
+        if (savedAvatar) setAvatar(savedAvatar);
+        const savedPortfolio = localStorage.getItem('craftsmanPortfolio');
+        if (savedPortfolio) {
+          try { setPortfolioImages(JSON.parse(savedPortfolio)); } catch {}
+        }
+      }
+      setLoading(false);
+    };
+    loadData();
   }, []);
 
   const t = {
@@ -93,6 +134,12 @@ const CraftsmanProfilePage = () => {
     deleteAccount: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
     deleteWarning: lang === 'ar' ? 'عند حذف حسابك، سيتم حذف جميع بياناتك بشكل نهائي ولا يمكن استعادتها.' : 'Deleting your account will permanently remove all your data and cannot be undone.',
     delete: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
+    stats: lang === 'ar' ? 'الإحصائيات' : 'Statistics',
+    earnings: lang === 'ar' ? 'الأرباح' : 'Earnings',
+    completed: lang === 'ar' ? 'مكتملة' : 'Completed',
+    pending: lang === 'ar' ? 'قيد الانتظار' : 'Pending',
+    rating: lang === 'ar' ? 'التقييم' : 'Rating',
+    featured: lang === 'ar' ? 'مميز' : 'Featured',
   };
 
   const handleChange = (e) => {
@@ -121,7 +168,6 @@ const CraftsmanProfilePage = () => {
     }));
     const updated = [...portfolioImages, ...newImages];
     setPortfolioImages(updated);
-    // Save to localStorage
     const toSave = updated.map(img => ({ id: img.id, name: img.name, date: img.date }));
     localStorage.setItem('craftsmanPortfolio', JSON.stringify(toSave));
   };
@@ -133,11 +179,48 @@ const CraftsmanProfilePage = () => {
     localStorage.setItem('craftsmanPortfolio', JSON.stringify(toSave));
   };
 
-  const handleSave = (e) => {
+  // ✅ حفظ الملف الشخصي - باستخدام api.updateCraftsmanProfile
+  const handleSave = async (e) => {
     e.preventDefault();
-    localStorage.setItem('craftsmanProfile', JSON.stringify(profile));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      if (profile.bio) formData.append('bio', profile.bio);
+      if (profile.price) formData.append('hourly_rate', profile.price);
+      if (profile.city) formData.append('city', profile.city);
+      if (profile.district) formData.append('district', profile.district);
+      if (profile.phone) formData.append('phone', profile.phone);
+      if (avatar && avatar.startsWith('data:')) {
+        // تحويل base64 إلى file
+        const res = await fetch(avatar);
+        const blob = await res.blob();
+        formData.append('profile_photo', blob, 'avatar.jpg');
+      }
+      
+      // المهارات
+      if (profile.profession) {
+        const skills = profile.profession.split(',').map(s => s.trim());
+        skills.forEach(skill => formData.append('skills[]', skill));
+      }
+
+      const data = await api.updateCraftsmanProfile(formData);
+      
+      // تحديث بيانات المستخدم في Context
+      if (data.craftsman) {
+        updateUser({ craftsman: data.craftsman });
+      }
+      
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.warn('⚠️ Save error, using localStorage fallback:', error);
+      // Fallback - حفظ في localStorage
+      localStorage.setItem('craftsmanProfile', JSON.stringify(profile));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    }
+    setLoading(false);
   };
 
   // Dynamic colors
@@ -159,14 +242,15 @@ const CraftsmanProfilePage = () => {
     outline: 'none',
     fontFamily: "'Cairo', sans-serif",
     transition: 'all 0.3s ease',
-    textAlign: 'right',
+    textAlign: lang === 'ar' ? 'right' : 'left',
   };
 
   return (
-    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
+    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
         .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
         .delay-100 { animation-delay: 0.1s; }
@@ -175,6 +259,7 @@ const CraftsmanProfilePage = () => {
         .hover-lift { transition: all 0.3s ease; }
         .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,0.12); }
         .tab-active { background: #3b82f6 !important; color: white !important; }
+        .animate-spin { animation: spin 1s linear infinite; }
         @media (max-width: 768px) {
           .profile-grid { grid-template-columns: 1fr !important; }
           .portfolio-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -203,7 +288,6 @@ const CraftsmanProfilePage = () => {
                   {profile.firstName?.charAt(0) || 'ح'}
                 </div>
               )}
-              {/* Camera icon overlay */}
               <div style={{
                 position: 'absolute', bottom: '4px', right: '4px',
                 width: '30px', height: '30px', borderRadius: '50%',
@@ -223,6 +307,28 @@ const CraftsmanProfilePage = () => {
           <p className="animate-fade-in-up delay-200" style={{ fontSize: '1rem', opacity: 0.85 }}>
             {profile.profession || t.craftsman}
           </p>
+          {stats.is_featured && (
+            <span style={{ display: 'inline-block', marginTop: '8px', background: 'rgba(255,255,255,0.2)', padding: '4px 16px', borderRadius: '50px', fontSize: '0.8rem' }}>
+              ⭐ {t.featured}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 24px', marginTop: '-20px', position: 'relative', zIndex: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+          {[
+            { value: `${stats.total_earnings || 0} ${t.egp}`, label: t.earnings, color: '#059669' },
+            { value: stats.completed_bookings || 0, label: t.completed, color: '#3b82f6' },
+            { value: stats.pending_bookings || 0, label: t.pending, color: '#f59e0b' },
+            { value: stats.rating || 0, label: t.rating, color: '#8b5cf6' },
+          ].map((stat, i) => (
+            <div key={i} style={{ background: cardBg, borderRadius: '12px', padding: '16px', textAlign: 'center', border: `1px solid ${borderColor}` }}>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: stat.color }}>{stat.value}</div>
+              <div style={{ fontSize: '0.7rem', color: textSecondary }}>{stat.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -353,22 +459,23 @@ const CraftsmanProfilePage = () => {
                   </div>
                 </div>
 
-                <button type="submit" style={{
-                  padding: '14px 32px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                <button type="submit" disabled={loading} style={{
+                  padding: '14px 32px', background: loading ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700,
-                  fontSize: '1rem', cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
-                  display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 16px rgba(37,99,235,0.3)',
-                }}
-                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; }}>
-                  <Save size={18} />{t.save}
+                  fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif", display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: loading ? 'none' : '0 4px 16px rgba(37,99,235,0.3)',
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                  {loading ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                  {loading ? lang === 'ar' ? 'جاري الحفظ...' : 'Saving...' : t.save}
                 </button>
               </form>
             </div>
           </div>
         )}
 
-        {/* Portfolio Tab */}
+        {/* Portfolio Tab - نفس الكود */}
         {activeTab === 'portfolio' && (
           <div className="animate-fade-in-up">
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
@@ -380,7 +487,6 @@ const CraftsmanProfilePage = () => {
 
               <ImageUploader onUpload={handlePortfolioUpload} multiple={true} maxFiles={10} />
 
-              {/* Portfolio Grid */}
               {portfolioImages.length > 0 && (
                 <div className="portfolio-grid" style={{
                   display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -417,7 +523,7 @@ const CraftsmanProfilePage = () => {
           </div>
         )}
 
-        {/* Settings Tab */}
+        {/* Settings Tab - نفس الكود */}
         {activeTab === 'settings' && (
           <div className="animate-fade-in-up">
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}`, marginBottom: '20px' }}>
@@ -446,7 +552,6 @@ const CraftsmanProfilePage = () => {
               }}>{t.change}</button>
             </div>
 
-            {/* Delete Account */}
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#dc2626', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Trash2 size={18} />

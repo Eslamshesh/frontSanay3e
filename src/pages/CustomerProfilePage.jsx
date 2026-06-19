@@ -1,18 +1,21 @@
+// src/pages/CustomerProfilePage.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import { 
   User, Camera, Mail, Phone, MapPin, Home,
   Save, Lock, Trash2, CheckCircle,
-  Settings, Heart, Star, Clock
+  Settings, Heart, Star, Clock, Loader
 } from 'lucide-react';
 
 const CustomerProfilePage = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { darkMode } = useTheme();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [avatar, setAvatar] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -34,13 +37,33 @@ const CustomerProfilePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
+  // ✅ جلب بيانات العميل من API
   useEffect(() => {
-    const savedProfile = localStorage.getItem('customerProfile');
-    if (savedProfile) {
-      try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
-    }
-    const savedAvatar = localStorage.getItem('customerAvatar');
-    if (savedAvatar) setAvatar(savedAvatar);
+    const loadData = async () => {
+      try {
+        const userData = await api.getMe();
+        if (userData.user) {
+          const u = userData.user;
+          setProfile(prev => ({
+            ...prev,
+            firstName: u.name?.split(' ')[0] || '',
+            lastName: u.name?.split(' ')[1] || '',
+            email: u.email || '',
+            phone: u.phone || '',
+          }));
+          if (u.avatar_url) setAvatar(u.avatar_url);
+        }
+      } catch (error) {
+        console.warn('⚠️ Using fallback data:', error);
+        const savedProfile = localStorage.getItem('customerProfile');
+        if (savedProfile) {
+          try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
+        }
+        const savedAvatar = localStorage.getItem('customerAvatar');
+        if (savedAvatar) setAvatar(savedAvatar);
+      }
+    };
+    loadData();
   }, []);
 
   const t = {
@@ -86,11 +109,39 @@ const CustomerProfilePage = () => {
     }
   };
 
-  const handleSave = (e) => {
+  // ✅ حفظ الملف الشخصي - باستخدام api.updateProfile
+  const handleSave = async (e) => {
     e.preventDefault();
-    localStorage.setItem('customerProfile', JSON.stringify(profile));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      if (profile.phone) formData.append('phone', profile.phone);
+      if (profile.firstName && profile.lastName) {
+        formData.append('name', `${profile.firstName} ${profile.lastName}`);
+      }
+      if (avatar && avatar.startsWith('data:')) {
+        const res = await fetch(avatar);
+        const blob = await res.blob();
+        formData.append('avatar', blob, 'avatar.jpg');
+      }
+
+      const data = await api.updateProfile(formData);
+      
+      // تحديث بيانات المستخدم في Context
+      if (data.user) {
+        updateUser(data.user);
+      }
+      
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.warn('⚠️ Save error, using localStorage fallback:', error);
+      localStorage.setItem('customerProfile', JSON.stringify(profile));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    }
+    setLoading(false);
   };
 
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
@@ -111,18 +162,20 @@ const CustomerProfilePage = () => {
     outline: 'none',
     fontFamily: "'Cairo', sans-serif",
     transition: 'all 0.3s ease',
-    textAlign: 'right',
+    textAlign: lang === 'ar' ? 'right' : 'left',
   };
 
   return (
-    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
+    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
         .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
         .delay-100 { animation-delay: 0.1s; }
         .delay-200 { animation-delay: 0.2s; }
+        .animate-spin { animation: spin 1s linear infinite; }
         @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
@@ -254,15 +307,16 @@ const CustomerProfilePage = () => {
                   />
                 </div>
 
-                <button type="submit" style={{
-                  padding: '14px 32px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                <button type="submit" disabled={loading} style={{
+                  padding: '14px 32px', background: loading ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                   color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700,
-                  fontSize: '1rem', cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
-                  display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 16px rgba(37,99,235,0.3)',
-                }}
-                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; }}>
-                  <Save size={18} />{t.save}
+                  fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif", display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: loading ? 'none' : '0 4px 16px rgba(37,99,235,0.3)',
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                  {loading ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                  {loading ? lang === 'ar' ? 'جاري الحفظ...' : 'Saving...' : t.save}
                 </button>
               </form>
             </div>

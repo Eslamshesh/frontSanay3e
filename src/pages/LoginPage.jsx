@@ -1,5 +1,6 @@
+// src/pages/LoginPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { 
@@ -10,8 +11,10 @@ import {
 const LoginPage = () => {
   const { login } = useAuth();
   const { darkMode, toggleTheme } = useTheme();
-  const [lang, setLang] = useState('ar');
+  const navigate = useNavigate();
+  const location = useLocation();
   
+  const [lang, setLang] = useState('ar');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('customer');
@@ -20,6 +23,9 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successLogin, setSuccessLogin] = useState(false);
+
+  // المسار الأصلي
+  const from = location.state?.from?.pathname || '/';
 
   // Language
   useEffect(() => {
@@ -74,10 +80,11 @@ const LoginPage = () => {
     invalidCredentials: lang === 'ar' ? 'بريد إلكتروني أو كلمة مرور غير صحيحة' : 'Invalid email or password',
     successMessage: lang === 'ar' ? 'تم تسجيل الدخول بنجاح!' : 'Login successful!',
     demoLogin: lang === 'ar' ? 'تسجيل دخول سريع' : 'Quick Login',
-    demoCustomer: lang === 'ar' ? 'حساب عميل تجريبي' : 'Demo Customer',
-    demoCraftsman: lang === 'ar' ? 'حساب حرفي تجريبي' : 'Demo Craftsman',
+    demoCustomer: lang === 'ar' ? 'عميل تجريبي' : 'Demo Customer',
+    demoCraftsman: lang === 'ar' ? 'حرفي تجريبي' : 'Demo Craftsman',
   };
 
+  // ✅ تسجيل الدخول مع التوجيه من الصفحة
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -89,35 +96,101 @@ const LoginPage = () => {
 
     setLoading(true);
 
-    // ✅ استخدام login من AuthContext مباشرة
-    const result = await login(email, password);
+    try {
+      const result = await login(email, password);
 
-    if (!result.success) {
-      setError(result.message || t.invalidCredentials);
+      if (!result.success) {
+        setError(result.message || t.invalidCredentials);
+        setLoading(false);
+        return;
+      }
+
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email);
+        localStorage.setItem('rememberedRole', role);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+        localStorage.removeItem('rememberedRole');
+      }
+
+      setSuccessLogin(true);
       setLoading(false);
-      return;
-    }
 
-    // ✅ نجح - AuthContext هيتولى التوجيه تلقائياً
-    if (rememberMe) {
-      localStorage.setItem('rememberedEmail', email);
-      localStorage.setItem('rememberedRole', role);
-    } else {
-      localStorage.removeItem('rememberedEmail');
-      localStorage.removeItem('rememberedRole');
-    }
+      console.log('🔄 جاري التوجيه... role:', result.role, 'needsVerification:', result.needsVerification);
+      
+      // ✅ التحقق من البريد الإلكتروني أولاً
+      if (result.needsVerification) {
+        setTimeout(() => {
+          navigate('/verify-email', { replace: true });
+        }, 800);
+        return;
+      }
 
-    setSuccessLogin(true);
-    setLoading(false);
+      // ✅ توجيه حسب الدور
+      setTimeout(() => {
+        if (result.role === 'customer') {
+          navigate('/customer/home', { replace: true });
+        } else if (result.role === 'craftsman') {
+          navigate('/craftsman/home', { replace: true });
+        } else if (result.role === 'admin') {
+          navigate('/admin/dashboard', { replace: true });
+        } else {
+          navigate(from, { replace: true });
+        }
+      }, 800);
+
+    } catch (err) {
+      setError(err.message || t.invalidCredentials);
+      setLoading(false);
+    }
   };
 
-  const handleDemoLogin = (demoRole) => {
+  // ✅ Demo Login مع التوجيه من الصفحة
+  const handleDemoLogin = async (demoRole) => {
     setRole(demoRole);
-    setSuccessLogin(true);
-    login(
-      demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com',
-      '123456'
-    );
+    
+    const demoEmail = demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com';
+    
+    setEmail(demoEmail);
+    setPassword('12345678');
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await login(demoEmail, '12345678');
+      
+      if (result.success) {
+        setSuccessLogin(true);
+        setLoading(false);
+        
+        console.log('🔄 Demo login - role:', result.role, 'needsVerification:', result.needsVerification);
+        
+        // ✅ التحقق من البريد الإلكتروني أولاً
+        if (result.needsVerification) {
+          setTimeout(() => {
+            navigate('/verify-email', { replace: true });
+          }, 800);
+          return;
+        }
+
+        // ✅ توجيه حسب الدور
+        setTimeout(() => {
+          if (result.role === 'customer') {
+            navigate('/customer/home', { replace: true });
+          } else if (result.role === 'craftsman') {
+            navigate('/craftsman/home', { replace: true });
+          } else {
+            navigate('/', { replace: true });
+          }
+        }, 800);
+      } else {
+        setError(result.message || 'فشل تسجيل الدخول التجريبي');
+        setLoading(false);
+      }
+    } catch (err) {
+      setError(err.message || 'حدث خطأ');
+      setLoading(false);
+    }
   };
 
   // Dynamic colors
@@ -132,15 +205,18 @@ const LoginPage = () => {
     : 'linear-gradient(135deg, #1e40af, #3b82f6)';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: bgColor,
-      padding: '40px 20px',
-      fontFamily: "'Cairo', sans-serif",
-    }}>
+    <div
+      dir={lang === 'ar' ? 'rtl' : 'ltr'}
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: bgColor,
+        padding: '40px 20px',
+        fontFamily: "'Cairo', sans-serif",
+      }}
+    >
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -170,8 +246,15 @@ const LoginPage = () => {
         }
       `}</style>
 
-      {/* Top Bar - Language & Theme */}
-      <div style={{ position: 'fixed', top: '20px', right: '20px', display: 'flex', gap: '8px', zIndex: 10 }}>
+      {/* Top Bar */}
+      <div style={{ 
+        position: 'fixed', 
+        top: '20px', 
+        [lang === 'ar' ? 'left' : 'right']: '20px', 
+        display: 'flex', 
+        gap: '8px', 
+        zIndex: 10 
+      }}>
         <button onClick={toggleLang} style={{
           padding: '8px 14px', borderRadius: '10px', border: `1px solid ${borderColor}`,
           background: cardBg, cursor: 'pointer', color: textColor,
@@ -298,9 +381,15 @@ const LoginPage = () => {
               }}>
                 <Mail size={18} style={{ color: textSecondary, flexShrink: 0 }} />
                 <input
-                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  type="email" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
-                  style={{ flex: 1, border: 'none', outline: 'none', fontSize: '0.95rem', fontFamily: "'Cairo', sans-serif", background: 'transparent', color: textColor, textAlign: 'right' }}
+                  style={{ 
+                    flex: 1, border: 'none', outline: 'none', fontSize: '0.95rem', 
+                    fontFamily: "'Cairo', sans-serif", background: 'transparent', 
+                    color: textColor, textAlign: lang === 'ar' ? 'right' : 'left' 
+                  }}
                 />
               </div>
             </div>
@@ -317,9 +406,15 @@ const LoginPage = () => {
               }}>
                 <Lock size={18} style={{ color: textSecondary, flexShrink: 0 }} />
                 <input
-                  type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                  type={showPassword ? 'text' : 'password'} 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}
-                  style={{ flex: 1, border: 'none', outline: 'none', fontSize: '0.95rem', fontFamily: "'Cairo', sans-serif", background: 'transparent', color: textColor, textAlign: 'right' }}
+                  style={{ 
+                    flex: 1, border: 'none', outline: 'none', fontSize: '0.95rem', 
+                    fontFamily: "'Cairo', sans-serif", background: 'transparent', 
+                    color: textColor, textAlign: lang === 'ar' ? 'right' : 'left' 
+                  }}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: textSecondary, padding: '4px', display: 'flex', alignItems: 'center' }}>

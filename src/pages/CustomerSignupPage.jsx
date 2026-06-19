@@ -1,7 +1,9 @@
+// src/pages/CustomerSignupPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 import { 
   User, Mail, Phone, MapPin, Lock, Eye, EyeOff,
   Navigation, Building, Home, ChevronDown,
@@ -28,6 +30,7 @@ const CustomerSignupPage = () => {
   const [isLocating, setIsLocating] = useState(false);
   const [locationMethod, setLocationMethod] = useState('manual');
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -83,6 +86,8 @@ const CustomerSignupPage = () => {
     invalidEmail: lang === 'ar' ? 'بريد إلكتروني غير صالح' : 'Invalid email',
     passwordMin: lang === 'ar' ? '6 أحرف على الأقل' : 'Min 6 characters',
     passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
+    creating: lang === 'ar' ? 'جاري إنشاء الحساب...' : 'Creating account...',
+    redirecting: lang === 'ar' ? 'جاري التوجيه...' : 'Redirecting...',
   };
 
   const handleChange = (e) => {
@@ -152,25 +157,46 @@ const CustomerSignupPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  // ✅ تسجيل عميل - باستخدام api.registerClient
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (!validateForm()) return;
 
-    const userData = {
-      ...formData,
-      location: {
-        latitude: formData.latitude,
-        longitude: formData.longitude,
-        city: formData.city,
-        district: formData.district,
-        detectionMethod: locationMethod,
-      },
-    };
+    setIsSubmitting(true);
 
-    localStorage.setItem('customerData', JSON.stringify(userData));
-    login(formData.email, formData.password, 'customer');
+    try {
+      const data = await api.registerClient({
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        password: formData.password,
+        password_confirmation: formData.confirmPassword,
+        phone: formData.phone,
+      });
+
+      setSuccess(data.message || 'تم إنشاء الحساب بنجاح');
+      
+      // ✅ حفظ الإيميل للتأكيد
+      localStorage.setItem('pendingVerificationEmail', formData.email);
+      
+      // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
+      setTimeout(() => {
+        navigate('/verify-email');
+      }, 2000);
+
+    } catch (err) {
+      if (err.errors) {
+        // ✅ عرض أخطاء validation من الباك
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else {
+        setError(err.message || 'حدث خطأ في إنشاء الحساب');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Dynamic colors
@@ -207,6 +233,7 @@ const CustomerSignupPage = () => {
       justifyContent: 'center',
       padding: '40px 24px',
       fontFamily: "'Cairo', sans-serif",
+      direction: lang === 'ar' ? 'rtl' : 'ltr',
     }}>
       <style>{`
         @keyframes fadeInUp {
@@ -716,37 +743,40 @@ const CustomerSignupPage = () => {
           {/* Submit Button */}
           <button
             type="submit"
+            disabled={isSubmitting}
             className="animate-fade-in-up delay-300"
             style={{
               width: '100%',
               padding: '14px',
               borderRadius: '12px',
-              background: gradientBg,
+              background: isSubmitting ? '#94a3b8' : gradientBg,
               color: 'white',
               border: 'none',
-              cursor: 'pointer',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
               fontWeight: 700,
               fontSize: '1rem',
               fontFamily: "'Cairo', sans-serif",
               transition: 'all 0.3s ease',
-              boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+              boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
               marginTop: '4px',
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 4px 16px rgba(59,130,246,0.3)';
+              opacity: isSubmitting ? 0.7 : 1,
             }}
           >
-            <Sparkles size={18} />
-            {t.submit}
+            {isSubmitting ? (
+              <>
+                <Loader size={18} className="animate-spin" />
+                {t.creating}
+              </>
+            ) : (
+              <>
+                <Sparkles size={18} />
+                {t.submit}
+              </>
+            )}
           </button>
         </form>
 

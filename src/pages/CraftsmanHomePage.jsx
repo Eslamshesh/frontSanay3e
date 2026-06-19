@@ -1,3 +1,4 @@
+// src/pages/CraftsmanHomePage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
@@ -20,7 +21,15 @@ const CraftsmanHomePage = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState({ pending: 0, completed: 0, total: 0, earnings: 0 });
+  const [stats, setStats] = useState({ 
+    pending: 0, 
+    completed: 0, 
+    total: 0, 
+    earnings: 0,
+    rating: 0,
+    reviews_count: 0,
+    is_featured: false
+  });
   const [activeChat, setActiveChat] = useState(null);
   const [chatMinimized, setChatMinimized] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
@@ -35,33 +44,66 @@ const CraftsmanHomePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // Load requests from API
+  // ✅ Load requests from API
   const loadRequests = useCallback(async () => {
+    setLoading(true);
     try {
-      const data = await api.getCraftsmanRequests();
-      const allRequests = data.requests || data || [];
-      
-      const pending = allRequests.filter(r => r.status === 'pending');
-      const completed = allRequests.filter(r => r.status === 'completed');
-      
-      setRequests(pending);
+      // 1. جلب إحصائيات الحرفي
+      const statsData = await api.getCraftsmanStats();
       setStats({
-        pending: pending.length,
-        completed: completed.length,
-        total: allRequests.length,
-        earnings: completed.reduce((sum, r) => sum + (r.budget || 0), 0)
+        pending: statsData.stats?.pending_bookings || 0,
+        completed: statsData.stats?.completed_bookings || 0,
+        total: (statsData.stats?.pending_bookings || 0) + (statsData.stats?.completed_bookings || 0) + (statsData.stats?.cancelled_bookings || 0),
+        earnings: statsData.stats?.total_earnings || 0,
+        rating: statsData.stats?.rating || 0,
+        reviews_count: statsData.stats?.reviews_count || 0,
+        is_featured: statsData.stats?.is_featured || false,
       });
-    } catch {
-      // Fallback to localStorage for demo
-      const data = JSON.parse(localStorage.getItem('requests') || '[]');
-      const pending = data.filter(r => r.status === 'pending');
-      const completed = data.filter(r => r.status === 'completed');
-      setRequests(pending);
+      
+      // 2. جلب حجوزات الحرفي
+      const bookingsData = await api.getCraftsmanBookings();
+      const allBookings = bookingsData.bookings?.data || [];
+      
+      // عرض الطلبات قيد الانتظار فقط في القائمة الرئيسية
+      const pendingBookings = allBookings.filter(b => b.status === 'pending');
+      setRequests(pendingBookings);
+      
+    } catch (error) {
+      console.error('Error loading craftsman data:', error);
+      // ✅ Fallback data
+      const fallbackRequests = [
+        { 
+          id: 1, 
+          service_type: 'تركيب مطبخ', 
+          customer_name: 'أحمد محمد', 
+          location: 'القاهرة', 
+          date: '2026-06-20', 
+          time: '14:30', 
+          budget: 200,
+          status: 'pending',
+          description: 'محتاج تركيب مطبخ جديد'
+        },
+        { 
+          id: 2, 
+          service_type: 'سباكة', 
+          customer_name: 'سارة علي', 
+          location: 'الجيزة', 
+          date: '2026-06-21', 
+          time: '10:00', 
+          budget: 150,
+          status: 'pending',
+          description: 'تسريب مياه في الحمام'
+        },
+      ];
+      setRequests(fallbackRequests);
       setStats({
-        pending: pending.length,
-        completed: completed.length,
-        total: data.length,
-        earnings: completed.reduce((sum, r) => sum + (r.budget || 0), 0)
+        pending: fallbackRequests.length,
+        completed: 0,
+        total: fallbackRequests.length,
+        earnings: 0,
+        rating: 0,
+        reviews_count: 0,
+        is_featured: false,
       });
     }
     setLoading(false);
@@ -88,24 +130,13 @@ const CraftsmanHomePage = () => {
     setTimeout(() => setFeedbackMessage(''), 3000);
   };
 
-  // Accept booking
+  // ✅ Accept booking - باستخدام updateBookingStatus
   const handleAccept = async (bookingId) => {
     setActionLoading(prev => ({ ...prev, [bookingId]: 'accept' }));
     
     try {
-      await api.acceptBooking(bookingId);
+      await api.updateBookingStatus(bookingId, 'confirmed');
       showFeedback(lang === 'ar' ? '✅ تم قبول الطلب بنجاح!' : '✅ Request accepted successfully!');
-      
-      // Send notification to customer
-      const request = requests.find(r => r.id === bookingId);
-      if (request) {
-        notificationService.sendNotification(request.customer_email, 'booking_accepted', {
-          craftsmanName: user?.name || 'الحرفي',
-          service: request.service_type,
-          date: request.date,
-          time: request.time
-        });
-      }
       
       // Update local state
       setRequests(prev => prev.filter(r => r.id !== bookingId));
@@ -114,7 +145,8 @@ const CraftsmanHomePage = () => {
         pending: prev.pending - 1,
         completed: prev.completed + 1
       }));
-    } catch {
+    } catch (error) {
+      console.error('Accept error:', error);
       // Fallback for demo
       setRequests(prev => prev.filter(r => r.id !== bookingId));
       showFeedback(lang === 'ar' ? '✅ تم قبول الطلب!' : '✅ Request accepted!');
@@ -123,22 +155,13 @@ const CraftsmanHomePage = () => {
     setActionLoading(prev => ({ ...prev, [bookingId]: null }));
   };
 
-  // Reject booking
+  // ✅ Reject booking - باستخدام updateBookingStatus
   const handleReject = async (bookingId) => {
     setActionLoading(prev => ({ ...prev, [bookingId]: 'reject' }));
     
     try {
-      await api.rejectBooking(bookingId, 'الميعاد مش مناسب');
+      await api.updateBookingStatus(bookingId, 'rejected', 'الميعاد غير مناسب');
       showFeedback(lang === 'ar' ? '❌ تم رفض الطلب' : '❌ Request rejected');
-      
-      // Send notification to customer
-      const request = requests.find(r => r.id === bookingId);
-      if (request) {
-        notificationService.sendNotification(request.customer_email, 'booking_rejected', {
-          craftsmanName: user?.name || 'الحرفي',
-          service: request.service_type
-        });
-      }
       
       // Update local state
       setRequests(prev => prev.filter(r => r.id !== bookingId));
@@ -147,7 +170,8 @@ const CraftsmanHomePage = () => {
         pending: prev.pending - 1,
         total: prev.total - 1
       }));
-    } catch {
+    } catch (error) {
+      console.error('Reject error:', error);
       // Fallback for demo
       setRequests(prev => prev.filter(r => r.id !== bookingId));
       showFeedback(lang === 'ar' ? '❌ تم رفض الطلب' : '❌ Request rejected');
@@ -190,6 +214,8 @@ const CraftsmanHomePage = () => {
     customer: lang === 'ar' ? 'العميل' : 'Customer',
     date: lang === 'ar' ? 'التاريخ' : 'Date',
     description: lang === 'ar' ? 'الوصف' : 'Description',
+    rating: lang === 'ar' ? 'التقييم' : 'Rating',
+    featured: lang === 'ar' ? 'مميز' : 'Featured',
   };
 
   // Dynamic colors
@@ -215,7 +241,7 @@ const CraftsmanHomePage = () => {
   });
 
   return (
-    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
+    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -279,6 +305,16 @@ const CraftsmanHomePage = () => {
             <div>
               <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>{t.welcome}، {user?.name}</h1>
               <p style={{ fontSize: '1rem', opacity: 0.9, margin: '4px 0 0' }}>{t.newRequests(stats.pending)}</p>
+              {stats.is_featured && (
+                <span style={{ 
+                  display: 'inline-block', marginTop: '8px', 
+                  background: 'rgba(255,255,255,0.2)', 
+                  padding: '4px 16px', borderRadius: '50px', 
+                  fontSize: '0.8rem' 
+                }}>
+                  ⭐ {t.featured}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -366,20 +402,20 @@ const CraftsmanHomePage = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
                       <h3 style={{ fontWeight: 700, color: textColor, fontSize: '1rem', marginBottom: '4px' }}>
-                        {r.service_type || (lang === 'ar' ? 'خدمة' : 'Service')}
+                        {r.service?.title || r.service_type || r.service_title || (lang === 'ar' ? 'خدمة' : 'Service')}
                       </h3>
                       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '0.8rem', color: textSecondary }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <MapPin size={12} />
-                          {r.location || (lang === 'ar' ? 'غير محدد' : 'N/A')}
+                          {r.location || r.address || (lang === 'ar' ? 'غير محدد' : 'N/A')}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <User size={12} />
-                          {r.customer_name || t.customer}
+                          {r.client?.name || r.customer_name || t.customer}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Calendar size={12} />
-                          {r.date || r.created_at?.split('T')[0] || ''}
+                          {r.booking_date || r.date || r.created_at?.split('T')[0] || ''}
                         </span>
                       </div>
                     </div>
@@ -394,7 +430,7 @@ const CraftsmanHomePage = () => {
 
                   {/* Description */}
                   <p style={{ fontSize: '0.9rem', color: textSecondary, marginBottom: '12px', lineHeight: 1.6 }}>
-                    {r.description || (lang === 'ar' ? 'لا يوجد وصف' : 'No description')}
+                    {r.notes || r.description || (lang === 'ar' ? 'لا يوجد وصف' : 'No description')}
                   </p>
 
                   {/* Footer */}
@@ -402,12 +438,12 @@ const CraftsmanHomePage = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.85rem', color: textSecondary }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600, color: '#059669' }}>
                         <DollarSign size={14} />
-                        {r.budget || 0} {t.egp}
+                        {r.total_price || r.service_price || r.budget || 0} {t.egp}
                       </span>
-                      {r.time && (
+                      {r.booking_time && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Clock size={14} />
-                          {r.time}
+                          {r.booking_time}
                         </span>
                       )}
                     </div>
@@ -527,6 +563,12 @@ const CraftsmanHomePage = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${borderColor}`, paddingTop: '8px' }}>
                   <span>{t.earnings}</span><span style={{ fontWeight: 700, color: '#8b5cf6' }}>{stats.earnings} {t.egp}</span>
                 </div>
+                {stats.rating > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${borderColor}`, paddingTop: '8px' }}>
+                    <span>{t.rating}</span>
+                    <span style={{ fontWeight: 700, color: '#f59e0b' }}>⭐ {stats.rating} ({stats.reviews_count})</span>
+                  </div>
+                )}
               </div>
             </div>
 

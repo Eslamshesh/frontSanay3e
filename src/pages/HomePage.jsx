@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -16,11 +17,15 @@ const HomePage = () => {
   const [lang, setLang] = useState('ar');
   const [activeTestimonial, setActiveTestimonial] = useState(0);
   const [showVoice, setShowVoice] = useState(false);
-  const [stats, setStats] = useState({ craftsmen: 500, customers: 10000, rating: 4.8 });
+  const [stats, setStats] = useState({ craftsmen: 0, customers: 10000, rating: 4.8 });
+  const [featuredCraftsmen, setFeaturedCraftsmen] = useState([]);
+  const [crafts, setCrafts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
   const { darkMode } = useTheme();
   const navigate = useNavigate();
 
-  // Language initialization
+  // ✅ Language initialization
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
@@ -34,24 +39,40 @@ const HomePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // Load real stats from API
+  // ✅ Load data from API
   useEffect(() => {
-    const loadStats = async () => {
+    const loadData = async () => {
+      setLoading(true);
       try {
-        const data = await api.getCraftsmen();
-        const craftsmen = data.craftsmen || data || [];
+        // 1. جلب الحرفيين المميزين
+        const featuredData = await api.getFeaturedCraftsmen();
+        setFeaturedCraftsmen(featuredData.craftsmen || []);
+        
+        // 2. جلب المهن
+        const craftsData = await api.getCrafts();
+        setCrafts(craftsData.crafts || []);
+        
+        // 3. جلب إحصائيات عدد الحرفيين
+        const craftsmenData = await api.getCraftsmen({ per_page: 1 });
+        const totalCraftsmen = craftsmenData.meta?.total || 0;
         setStats(prev => ({
           ...prev,
-          craftsmen: craftsmen.length || 500,
+          craftsmen: totalCraftsmen || 500,
         }));
-      } catch {
-        // Keep default stats
+      } catch (error) {
+        console.error('Error loading home data:', error);
+        setStats(prev => ({
+          ...prev,
+          craftsmen: 500,
+        }));
+      } finally {
+        setLoading(false);
       }
     };
-    loadStats();
+    loadData();
   }, []);
 
-  // Auto-rotate testimonials
+  // ✅ Auto-rotate testimonials
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
@@ -88,7 +109,14 @@ const HomePage = () => {
     craftsmanCount: (count) => lang === 'ar' ? `${count} حرفي` : `${count} Craftsmen`,
   };
 
-  const categories = [
+  // ✅ المهن - من API أو Fallback
+  const categories = crafts.length > 0 ? crafts.map(craft => ({
+    id: craft.id,
+    name: lang === 'ar' ? craft.name : (craft.name_en || craft.name),
+    icon: craft.icon || '🔧',
+    count: craft.craftsmen_count || 0,
+    color: '#3b82f6',
+  })) : [
     { name: lang === 'ar' ? 'كهربائي' : 'Electrician', icon: '⚡', count: 45, color: '#f59e0b' },
     { name: lang === 'ar' ? 'سباك' : 'Plumber', icon: '🔧', count: 38, color: '#3b82f6' },
     { name: lang === 'ar' ? 'نجار' : 'Carpenter', icon: '🪚', count: 32, color: '#8b5cf6' },
@@ -129,14 +157,20 @@ const HomePage = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+    if (query.trim()) {
+      // ✅ توجيه صحيح
+      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+    }
   };
 
   // Voice search handler
   const handleVoiceResult = (text) => {
     setQuery(text);
     setShowVoice(false);
-    if (text.trim()) navigate(`/search?q=${encodeURIComponent(text.trim())}`);
+    if (text.trim()) {
+      // ✅ توجيه صحيح
+      navigate(`/search?q=${encodeURIComponent(text.trim())}`);
+    }
   };
 
   // Dynamic colors
@@ -289,12 +323,27 @@ const HomePage = () => {
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '20px' }}>
             {categories.map((cat, index) => (
-              <motion.div key={cat.name} onClick={() => navigate(`/search?q=${cat.name}`)} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.08, duration: 0.4 }} className="hover-lift"
-                style={{ background: cardBg, borderRadius: '24px', padding: '36px 20px', textAlign: 'center', cursor: 'pointer', border: `1px solid ${borderColor}`, position: 'relative', overflow: 'hidden', }}
-                whileHover={{ y: -10, boxShadow: '0 20px 50px rgba(0,0,0,0.15)', borderColor: cat.color, }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: `linear-gradient(90deg, ${cat.color}, transparent)`, opacity: 0, transition: 'opacity 0.3s ease', }} className="hover-gradient" />
-                <div style={{ width: '64px', height: '64px', borderRadius: '18px', background: `${cat.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: '2rem', transition: 'all 0.3s ease', }}>
-                  {cat.icon}
+              <motion.div 
+                key={cat.id || cat.name} 
+                onClick={() => navigate(`/search?q=${cat.name}`)} 
+                initial={{ opacity: 0, y: 30 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }} 
+                transition={{ delay: index * 0.08, duration: 0.4 }} 
+                className="hover-lift"
+                style={{ 
+                  background: cardBg, borderRadius: '24px', padding: '36px 20px', 
+                  textAlign: 'center', cursor: 'pointer', border: `1px solid ${borderColor}`, 
+                  position: 'relative', overflow: 'hidden',
+                }}
+              >
+                <div style={{ 
+                  width: '64px', height: '64px', borderRadius: '18px', 
+                  background: `${'#3b82f6'}15`, display: 'flex', 
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', 
+                  fontSize: '2rem', transition: 'all 0.3s ease',
+                }}>
+                  {cat.icon || '🔧'}
                 </div>
                 <div style={{ fontWeight: '700', color: textColor, fontSize: '1.05rem', marginBottom: '6px' }}>{cat.name}</div>
                 <div style={{ color: textSecondary, fontSize: '0.85rem' }}>{t.craftsmanCount(cat.count)}</div>
@@ -382,10 +431,18 @@ const HomePage = () => {
             <div style={{ position: 'relative', zIndex: 1 }}>
               <h2 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '16px' }}>{t.ctaTitle}</h2>
               <p style={{ fontSize: '1.15rem', opacity: 0.95, marginBottom: '36px', maxWidth: '500px', margin: '0 auto 36px' }}>{t.ctaDesc}</p>
-              <button onClick={() => navigate('/select-role')}
-                style={{ padding: '16px 40px', borderRadius: '16px', background: 'white', color: '#2055de', border: 'none', fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer', fontFamily: "'Cairo', sans-serif", display: 'inline-flex', alignItems: 'center', gap: '10px', transition: 'all 0.3s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', }}
+              <button 
+                onClick={() => navigate('/select-role')}
+                style={{ 
+                  padding: '16px 40px', borderRadius: '16px', background: 'white', 
+                  color: '#2055de', border: 'none', fontWeight: 700, fontSize: '1.1rem', 
+                  cursor: 'pointer', fontFamily: "'Cairo', sans-serif", 
+                  display: 'inline-flex', alignItems: 'center', gap: '10px', 
+                  transition: 'all 0.3s ease', boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                }}
                 onMouseEnter={(e) => { e.target.style.transform = 'translateY(-3px)'; e.target.style.boxShadow = '0 12px 28px rgba(0,0,0,0.3)'; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'; }}>
+                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'; }}
+              >
                 {t.ctaBtn} <ArrowRight size={20} />
               </button>
             </div>

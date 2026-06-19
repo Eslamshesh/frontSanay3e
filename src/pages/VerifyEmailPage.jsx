@@ -1,32 +1,36 @@
+// src/pages/VerifyEmailPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import { 
   Mail, CheckCircle, AlertCircle, RefreshCw, 
   Shield, ArrowRight, Sparkles, Send, Clock,
-  Hash, Key, Star
+  Hash, Key, Star, Loader
 } from 'lucide-react';
 
 const VerifyEmailPage = () => {
   const navigate = useNavigate();
   const { darkMode } = useTheme();
+  const { user } = useAuth();
   const [lang, setLang] = useState('ar');
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const codeInputRefs = useRef([]);
-  const correctCode = '123456';
 
   // Language initialization
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
     
-    // Get email from localStorage or session
-    const email = localStorage.getItem('pendingVerificationEmail') || 'example@email.com';
+    // Get email from user context or localStorage
+    const email = user?.email || localStorage.getItem('pendingVerificationEmail') || 'example@email.com';
     setUserEmail(email);
     
     const handleLanguageChange = () => {
@@ -36,7 +40,7 @@ const VerifyEmailPage = () => {
     
     window.addEventListener('languagechange', handleLanguageChange);
     return () => window.removeEventListener('languagechange', handleLanguageChange);
-  }, []);
+  }, [user]);
 
   // Auto-focus first input
   useEffect(() => {
@@ -74,6 +78,43 @@ const VerifyEmailPage = () => {
     changeEmail: lang === 'ar' ? 'تغيير البريد الإلكتروني' : 'Change email',
     step: lang === 'ar' ? 'الخطوة الأخيرة' : 'Final Step',
     secure: lang === 'ar' ? 'تأكيد آمن ومشفر' : 'Secure & Encrypted Verification',
+    networkError: lang === 'ar' ? 'لا يوجد اتصال بالخادم. تأكد من اتصالك بالإنترنت.' : 'No server connection. Please check your internet.',
+  };
+
+  // ✅ التحقق من OTP باستخدام api.verifyEmail
+  const handleVerify = async (enteredCode) => {
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      await api.verifyEmail(enteredCode);
+      
+      // ✅ نجاح التحقق
+      setSuccess(true);
+      
+      setTimeout(() => {
+        const userRole = localStorage.getItem('userRole') || 'customer';
+        const targetPath = userRole === 'craftsman' ? '/craftsman/home' : '/customer/home';
+        navigate(targetPath);
+      }, 2000);
+
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else if (err.message === 'NETWORK_ERROR' || err.message === 'Failed to fetch') {
+        setError(t.networkError);
+      } else {
+        setError(err.message || t.wrongCode);
+      }
+      setIsVerifying(false);
+      setCode(['', '', '', '', '', '']);
+      setTimeout(() => {
+        if (codeInputRefs.current[0]) {
+          codeInputRefs.current[0].focus();
+        }
+      }, 100);
+    }
   };
 
   const handleInput = (index, value) => {
@@ -92,16 +133,7 @@ const VerifyEmailPage = () => {
     // Auto-verify when all digits are entered
     if (newCode.every(d => d !== '')) {
       const enteredCode = newCode.join('');
-      if (enteredCode === correctCode) {
-        handleSuccess();
-      } else {
-        setError(t.wrongCode);
-        // Shake and clear
-        setTimeout(() => {
-          setCode(['', '', '', '', '', '']);
-          codeInputRefs.current[0]?.focus();
-        }, 800);
-      }
+      handleVerify(enteredCode);
     }
   };
 
@@ -124,30 +156,10 @@ const VerifyEmailPage = () => {
 
     // Auto-verify if pasted code is complete
     if (pastedData.length === 6) {
-      if (pastedData === correctCode) {
-        handleSuccess();
-      } else {
-        setError(t.wrongCode);
-        setTimeout(() => {
-          setCode(['', '', '', '', '', '']);
-          codeInputRefs.current[0]?.focus();
-        }, 800);
-      }
+      handleVerify(pastedData);
     } else {
       codeInputRefs.current[pastedData.length]?.focus();
     }
-  };
-
-  const handleSuccess = () => {
-    setSuccess(true);
-    setIsVerifying(true);
-    
-    setTimeout(() => {
-      // Get the role from localStorage
-      const userRole = localStorage.getItem('userRole') || 'customer';
-      const targetPath = userRole === 'craftsman' ? '/craftsman/home' : '/customer/home';
-      navigate(targetPath);
-    }, 2000);
   };
 
   const handleManualVerify = () => {
@@ -158,28 +170,34 @@ const VerifyEmailPage = () => {
       return;
     }
 
-    setIsVerifying(true);
-    
-    setTimeout(() => {
-      if (enteredCode === correctCode) {
-        handleSuccess();
-      } else {
-        setError(t.wrongCode);
-        setIsVerifying(false);
-        setCode(['', '', '', '', '', '']);
-        codeInputRefs.current[0]?.focus();
-      }
-    }, 1000);
+    handleVerify(enteredCode);
   };
 
-  const handleResend = () => {
-    setCountdown(60);
+  // ✅ إعادة إرسال كود التحقق باستخدام api.resendVerification
+  const handleResend = async () => {
+    if (countdown > 0) return;
+    
+    setIsResending(true);
     setError('');
     setSuccess(false);
-    // Show temporary success
-    const tempSuccess = t.codeSent;
-    setSuccess(tempSuccess);
-    setTimeout(() => setSuccess(false), 3000);
+
+    try {
+      await api.resendVerification();
+      setSuccess(t.codeSent);
+      setCountdown(60);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else if (err.message === 'NETWORK_ERROR' || err.message === 'Failed to fetch') {
+        setError(t.networkError);
+      } else {
+        setError(err.message || 'حدث خطأ في إعادة الإرسال');
+      }
+    } finally {
+      setIsResending(false);
+    }
   };
 
   // Dynamic colors
@@ -202,6 +220,7 @@ const VerifyEmailPage = () => {
       background: bgColor,
       padding: '40px 20px',
       fontFamily: "'Cairo', sans-serif",
+      direction: lang === 'ar' ? 'rtl' : 'ltr',
     }}>
       <style>{`
         @keyframes fadeInUp {
@@ -302,7 +321,7 @@ const VerifyEmailPage = () => {
       `}</style>
 
       {/* Success Overlay */}
-      {isVerifying && (
+      {isVerifying && success && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -551,27 +570,10 @@ const VerifyEmailPage = () => {
             justifyContent: 'center',
             gap: '8px',
           }}
-          onMouseEnter={(e) => {
-            if (!isVerifying) {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 12px 30px rgba(37,99,235,0.4)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = '0 8px 25px rgba(37,99,235,0.3)';
-          }}
         >
           {isVerifying ? (
             <>
-              <span style={{
-                width: '20px',
-                height: '20px',
-                borderRadius: '50%',
-                border: '2px solid rgba(255,255,255,0.3)',
-                borderTopColor: 'white',
-                animation: 'spin 0.8s linear infinite',
-              }} />
+              <Loader size={18} className="animate-spin" />
               {t.verifying}
             </>
           ) : (
@@ -597,11 +599,12 @@ const VerifyEmailPage = () => {
           ) : (
             <button
               onClick={handleResend}
+              disabled={isResending}
               style={{
                 background: 'none',
                 border: 'none',
-                cursor: 'pointer',
-                color: '#3b82f6',
+                cursor: isResending ? 'not-allowed' : 'pointer',
+                color: isResending ? textSecondary : '#3b82f6',
                 fontWeight: 600,
                 fontSize: '0.9rem',
                 fontFamily: "'Cairo', sans-serif",
@@ -609,12 +612,15 @@ const VerifyEmailPage = () => {
                 alignItems: 'center',
                 gap: '6px',
                 transition: 'all 0.3s ease',
+                opacity: isResending ? 0.5 : 1,
               }}
-              onMouseEnter={(e) => { e.target.style.textDecoration = 'underline'; }}
-              onMouseLeave={(e) => { e.target.style.textDecoration = 'none'; }}
             >
-              <RefreshCw size={14} />
-              {t.resend}
+              {isResending ? (
+                <Loader size={14} className="animate-spin" />
+              ) : (
+                <RefreshCw size={14} />
+              )}
+              {isResending ? 'جاري...' : t.resend}
             </button>
           )}
         </div>

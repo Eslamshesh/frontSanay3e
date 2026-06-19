@@ -1,10 +1,12 @@
+// src/pages/ForgotPasswordPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 import { 
   Mail, Lock, ArrowLeft, ArrowRight, Send, 
   CheckCircle, AlertCircle, RefreshCw, Shield,
-  Eye, EyeOff, Sparkles, Key, Hash
+  Eye, EyeOff, Sparkles, Key, Hash, Loader
 } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
@@ -23,7 +25,7 @@ const ForgotPasswordPage = () => {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
-  const [correctCode] = useState('123456');
+  const [resetToken, setResetToken] = useState('');
   const codeInputRefs = useRef([]);
 
   // Language initialization
@@ -81,11 +83,14 @@ const ForgotPasswordPage = () => {
     step2: lang === 'ar' ? 'كود التحقق' : 'Verification',
     step3: lang === 'ar' ? 'كلمة جديدة' : 'New Password',
     fillEmail: lang === 'ar' ? 'يرجى إدخال البريد الإلكتروني' : 'Please enter your email',
+    networkError: lang === 'ar' ? 'لا يوجد اتصال بالخادم. تأكد من اتصالك بالإنترنت.' : 'No server connection. Please check your internet.',
   };
 
-  const handleSendEmail = (e) => {
+  // ✅ Step 1: إرسال OTP
+  const handleSendEmail = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     
     if (!email.trim()) {
       setError(t.fillEmail);
@@ -94,11 +99,12 @@ const ForgotPasswordPage = () => {
 
     setLoading(true);
     
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      setSuccess(t.codeSent);
+    try {
+      const data = await api.sendOtp(email, 'email', 'password_reset');
+      
+      setSuccess(data.message || t.codeSent);
       setResendTimer(60);
+      
       setTimeout(() => {
         setSuccess('');
         setStep('code');
@@ -109,53 +115,67 @@ const ForgotPasswordPage = () => {
           }
         }, 100);
       }, 1500);
-    }, 1500);
-  };
-
-  const handleResendCode = () => {
-    if (resendTimer > 0) return;
-    
-    setLoading(true);
-    setTimeout(() => {
+      
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else if (err.message === 'NETWORK_ERROR' || err.message === 'Failed to fetch') {
+        setError(t.networkError);
+      } else {
+        setError(err.message || 'حدث خطأ في إرسال الكود');
+      }
+    } finally {
       setLoading(false);
-      setSuccess(t.codeSent);
-      setResendTimer(60);
-      setCode(['', '', '', '', '', '']);
-      setTimeout(() => setSuccess(''), 3000);
-    }, 1000);
+    }
   };
 
-  const handleVerifyCode = (e) => {
+  // ✅ Step 2: التحقق من OTP
+  const handleVerifyCode = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     const enteredCode = code.join('');
     if (enteredCode.length < 6) {
       setError(t.fillCode);
-      // Shake animation could be added here
       return;
     }
 
     setLoading(true);
     
-    setTimeout(() => {
-      setLoading(false);
-      if (enteredCode === correctCode) {
+    try {
+      const data = await api.verifyOtp(email, enteredCode, 'password_reset');
+      
+      setResetToken(data.reset_token);
+      setSuccess(data.message || 'تم التحقق بنجاح');
+      
+      setTimeout(() => {
+        setSuccess('');
         setStep('newPassword');
+      }, 1000);
+      
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
       } else {
-        setError(t.wrongCode);
-        setCode(['', '', '', '', '', '']);
-        // Focus first input
-        if (codeInputRefs.current[0]) {
-          codeInputRefs.current[0].focus();
-        }
+        setError(err.message || t.wrongCode);
       }
-    }, 1000);
+      setCode(['', '', '', '', '', '']);
+      if (codeInputRefs.current[0]) {
+        codeInputRefs.current[0].focus();
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResetPassword = (e) => {
+  // ✅ Step 3: تغيير كلمة المرور
+  const handleResetPassword = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
 
     if (newPassword.length < 6) {
       setError(t.passwordMin);
@@ -169,13 +189,50 @@ const ForgotPasswordPage = () => {
 
     setLoading(true);
     
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await api.resetPasswordWithOtp(resetToken, newPassword, confirmPassword);
+      
       setSuccess(t.passwordChanged);
       setTimeout(() => {
         navigate('/login');
       }, 2000);
-    }, 1500);
+      
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else {
+        setError(err.message || 'حدث خطأ في تغيير كلمة المرور');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ إعادة إرسال الكود
+  const handleResendCode = async () => {
+    if (resendTimer > 0) return;
+    
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      const data = await api.sendOtp(email, 'email', 'password_reset');
+      setSuccess(data.message || t.codeSent);
+      setResendTimer(60);
+      setCode(['', '', '', '', '', '']);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      if (err.errors) {
+        const errorMessages = Object.values(err.errors).flat().join(' | ');
+        setError(errorMessages);
+      } else {
+        setError(err.message || 'حدث خطأ في إعادة الإرسال');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCodeInput = (index, value) => {
@@ -236,6 +293,7 @@ const ForgotPasswordPage = () => {
       background: bgColor,
       padding: '40px 20px',
       fontFamily: "'Cairo', sans-serif",
+      direction: lang === 'ar' ? 'rtl' : 'ltr',
     }}>
       <style>{`
         @keyframes fadeInUp {
@@ -491,8 +549,9 @@ const ForgotPasswordPage = () => {
                     fontFamily: "'Cairo', sans-serif",
                     background: 'transparent',
                     color: textColor,
-                    textAlign: 'right',
+                    textAlign: lang === 'ar' ? 'right' : 'left',
                   }}
+                  required
                 />
               </div>
             </div>
@@ -519,27 +578,10 @@ const ForgotPasswordPage = () => {
                 justifyContent: 'center',
                 gap: '8px',
               }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 12px 30px rgba(37,99,235,0.4)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 8px 25px rgba(37,99,235,0.3)';
-              }}
             >
               {loading ? (
                 <>
-                  <span style={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
+                  <Loader size={18} className="animate-spin" />
                   {t.sending}
                 </>
               ) : (
@@ -621,14 +663,7 @@ const ForgotPasswordPage = () => {
             >
               {loading ? (
                 <>
-                  <span style={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
+                  <Loader size={18} className="animate-spin" />
                   {t.verifying}
                 </>
               ) : (
@@ -706,8 +741,9 @@ const ForgotPasswordPage = () => {
                     fontFamily: "'Cairo', sans-serif",
                     background: 'transparent',
                     color: textColor,
-                    textAlign: 'right',
+                    textAlign: lang === 'ar' ? 'right' : 'left',
                   }}
+                  required
                 />
                 <button
                   type="button"
@@ -758,8 +794,9 @@ const ForgotPasswordPage = () => {
                     fontFamily: "'Cairo', sans-serif",
                     background: 'transparent',
                     color: textColor,
-                    textAlign: 'right',
+                    textAlign: lang === 'ar' ? 'right' : 'left',
                   }}
+                  required
                 />
                 <button
                   type="button"
@@ -802,14 +839,7 @@ const ForgotPasswordPage = () => {
             >
               {loading ? (
                 <>
-                  <span style={{
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
+                  <Loader size={18} className="animate-spin" />
                   {t.changing}
                 </>
               ) : (

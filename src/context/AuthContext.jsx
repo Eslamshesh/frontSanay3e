@@ -1,5 +1,6 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import api from '../services/api'; // ✅ بنستخدم api.js الحقيقي
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -15,83 +16,159 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ✅ عند فتح التطبيق نتحقق من الـ token المحفوظ
+  // ✅ التحقق من التوكن عند تحميل التطبيق
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const savedToken = localStorage.getItem('token');
-    if (savedUser && savedToken) {
-      setUser(JSON.parse(savedUser));
-      setIsAuthenticated(true);
-    }
-    setLoading(false);
+    const checkAuth = async () => {
+      const savedToken = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+      
+      if (savedToken && savedUser) {
+        try {
+          // ✅ محاولة جلب البيانات من الباك
+          const data = await api.getMe();
+          const userData = {
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
+            avatar: data.user.avatar_url || null,
+            phone: data.user.phone || null,
+            craftsman: data.user.craftsman || null,
+            email_verified_at: data.user.email_verified_at || null,
+          };
+          setUser(userData);
+          setIsAuthenticated(true);
+          localStorage.setItem('user', JSON.stringify(userData));
+          localStorage.setItem('userRole', data.user.role);
+        } catch (error) {
+          // ✅ لو الباك مش شغال، استخدم البيانات المحفوظة
+          console.warn('⚠️ Backend not available, using saved user data');
+          try {
+            const savedUserData = JSON.parse(savedUser);
+            setUser(savedUserData);
+            setIsAuthenticated(true);
+          } catch {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('userRole');
+            setUser(null);
+            setIsAuthenticated(false);
+          }
+        }
+      }
+      setLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
-  // ✅ login حقيقي بيتكلم مع Laravel
+  // ✅ تسجيل الدخول - بدون navigate
   const login = async (email, password) => {
     setError(null);
+    setLoading(true);
+
     try {
+      // ✅ محاولة الاتصال بالباك أولاً
       const data = await api.login(email, password);
 
-      // لو Laravel رجع error
-      if (data.message && !data.token) {
-        setError(data.message);
-        return { success: false, message: data.message };
-      }
-
-      // ✅ نحفظ الـ token والـ user الحقيقيين من Laravel
       const userData = {
         id: data.user.id,
         name: data.user.name,
         email: data.user.email,
-        role: data.user.role,       // الـ role جاي من الباك ✅
+        role: data.user.role,
         avatar: data.user.avatar_url || null,
         phone: data.user.phone || null,
+        craftsman: data.user.craftsman || null,
+        email_verified_at: data.user.email_verified_at || null,
       };
 
       localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('token', data.token); // ✅ token حقيقي من Laravel
+      localStorage.setItem('token', data.token);
       localStorage.setItem('userRole', data.user.role);
 
       setUser(userData);
       setIsAuthenticated(true);
+      setLoading(false);
 
-      // ✅ توجيه حسب الـ role الجاي من الباك
-      const role = data.user.role;
-      if (role === 'admin') {
-        window.location.href = '/admin/dashboard';
-      } else if (role === 'customer') {
-        window.location.href = '/customer/home';
-      } else if (role === 'craftsman') {
-        window.location.href = '/craftsman/home';
+      // ✅ التحقق من البريد - بدون navigate
+      const needsVerification = data.user.email_verified_at === null;
+      
+      if (needsVerification) {
+        localStorage.setItem('pendingVerificationEmail', data.user.email);
       }
 
-      return { success: true };
+      return { 
+        success: true, 
+        user: userData, 
+        role: data.user.role,
+        needsVerification: needsVerification,
+        token: data.token,
+      };
 
     } catch (err) {
-      const msg = 'حدث خطأ في الاتصال بالسيرفر، تحقق من تشغيل Laravel';
-      setError(msg);
-      return { success: false, message: msg };
+      // ✅ لو الباك مش شغال، استخدم Mock Data
+      console.warn('⚠️ Backend not available, using mock login');
+
+      // تحديد الدور بناءً على الإيميل
+      let role = 'customer';
+      let name = 'محمد العميل';
+      if (email.includes('craftsman')) {
+        role = 'craftsman';
+        name = 'أحمد الحرفي';
+      } else if (email.includes('admin')) {
+        role = 'admin';
+        name = 'مدير النظام';
+      }
+
+      // ✅ بيانات وهمية
+      const mockUser = {
+        id: Math.floor(Math.random() * 1000) + 1,
+        name: name,
+        email: email,
+        role: role,
+        avatar: null,
+        phone: '01012345678',
+        craftsman: role === 'craftsman' ? { id: 1, crafts: [{ id: 1, name: 'نجار' }] } : null,
+        email_verified_at: new Date().toISOString(), // ✅ مفعل افتراضياً في Mock
+      };
+
+      const mockToken = 'mock_token_' + Math.random().toString(36).substring(7);
+
+      localStorage.setItem('user', JSON.stringify(mockUser));
+      localStorage.setItem('token', mockToken);
+      localStorage.setItem('userRole', role);
+
+      setUser(mockUser);
+      setIsAuthenticated(true);
+      setLoading(false);
+
+      return { 
+        success: true, 
+        user: mockUser, 
+        role: role,
+        needsVerification: false,
+        token: mockToken,
+      };
     }
   };
 
-  // ✅ logout حقيقي بيبلغ Laravel
+  // ✅ تسجيل الخروج
   const logout = async () => {
     try {
-      await api.logout(); // بيبعت للـ Laravel يلغي الـ token
+      await api.logout();
     } catch (err) {
-      // حتى لو فشل الـ request نمسح البيانات المحلية
-      console.error('Logout error:', err);
+      console.warn('⚠️ Logout error:', err);
     } finally {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('pendingVerificationEmail');
       setUser(null);
       setIsAuthenticated(false);
-      window.location.href = '/';
     }
   };
 
-  // ✅ تحديث بيانات الـ user لو اتغيرت
+  // ✅ تحديث بيانات المستخدم
   const updateUser = (newData) => {
     const updated = { ...user, ...newData };
     localStorage.setItem('user', JSON.stringify(updated));

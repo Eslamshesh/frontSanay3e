@@ -1,27 +1,25 @@
+// src/pages/NotificationsViewPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import notificationService from '../services/notificationService';
-import api from '../services/api';
 import { 
   Bell, BellOff, Check, Trash2, Star, MessageCircle,
-  Calendar, DollarSign, Megaphone, User, Eye,
-  Wrench, MapPin, Clock, ChevronLeft, Filter,
-  CheckCircle, XCircle, AlertCircle, Sparkles,
-  TrendingUp, Zap, Heart, Award, Loader
+  Calendar, DollarSign, Megaphone, Eye,
+  Clock, CheckCircle, XCircle, Sparkles,
+  TrendingUp, Zap, Award, Loader
 } from 'lucide-react';
 
 const NotificationsViewPage = () => {
-  const { user } = useAuth();
   const { darkMode } = useTheme();
+  const { user } = useAuth();
   const [lang, setLang] = useState('ar');
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  const [animateIn, setAnimateIn] = useState(false);
 
-  const userData = JSON.parse(localStorage.getItem('user') || '{}');
-  const role = userData?.role || 'customer';
+  const role = user?.role || 'customer';
 
   // Language
   useEffect(() => {
@@ -32,161 +30,94 @@ const NotificationsViewPage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // ✅ تعريف loadNotifications قبل استخدامها
-  const loadNotifications = useCallback(() => {
+  // ✅ جلب الإشعارات من API
+  const loadNotifications = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      try {
-        // Try API first
-        const data = notificationService.getUserNotifications(userData.email, role);
-        setNotifications(data);
-      } catch {
-        // Fallback
-        const data = notificationService.getUserNotifications(userData.email, role);
-        setNotifications(data);
-      }
-      setLoading(false);
-    }, 500);
-  }, [userData.email, role]);
-
-  // ✅ تعريف handleMarkAsRead
-  const handleMarkAsRead = useCallback((id) => {
     try {
-      api.markNotificationAsRead(id);
-    } catch {}
-    notificationService.markAsRead(id);
-    loadNotifications();
-  }, [loadNotifications]);
-
-  // ✅ تعريف handleMarkAllAsRead
-  const handleMarkAllAsRead = useCallback(() => {
-    try {
-      api.markAllNotificationsAsRead();
-    } catch {}
-    notificationService.markAllAsRead(userData.email);
-    loadNotifications();
-  }, [loadNotifications, userData.email]);
-
-  // ✅ تعريف handleDelete
-  const handleDelete = useCallback((id) => {
-    try {
-      api.deleteNotification(id);
-    } catch {}
-    notificationService.deleteNotification(id);
-    loadNotifications();
-  }, [loadNotifications]);
-
-  // ✅ تعريف handleClearAll
-  const handleClearAll = useCallback(() => {
-    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف كل الإشعارات؟' : 'Are you sure you want to delete all notifications?')) {
-      notificationService.clearAll(userData.email);
+      const data = await notificationService.getNotifications(filter === 'unread');
+      setNotifications(data.notifications || []);
+      setUnreadCount(data.unreadCount || 0);
+    } catch (error) {
+      console.warn('⚠️ Notifications error:', error);
       setNotifications([]);
+      setUnreadCount(0);
     }
-  }, [lang, userData.email]);
+    setLoading(false);
+  }, [filter]);
 
-  // ✅ Load notifications on mount
-  useEffect(() => {
-    loadNotifications();
-    setAnimateIn(true);
-
-    // Listen for new notifications
-    const handleNewNotification = () => loadNotifications();
-    window.addEventListener('newNotification', handleNewNotification);
-    return () => window.removeEventListener('newNotification', handleNewNotification);
+  // ✅ تعليم كمقروء
+  const handleMarkAsRead = useCallback(async (id) => {
+    try {
+      await notificationService.markAsRead(id);
+      loadNotifications();
+    } catch (error) {
+      console.warn('⚠️ Mark read error:', error);
+    }
   }, [loadNotifications]);
 
-  // Add demo notifications if empty
-  useEffect(() => {
-    const existing = notificationService.getUserNotifications(userData.email, role);
-    if (existing.length === 0) {
-      notificationService.addDemoNotifications(userData.email, role);
+  // ✅ تعليم الكل كمقروء
+  const handleMarkAllAsRead = useCallback(async () => {
+    try {
+      await notificationService.markAllAsRead();
       loadNotifications();
+    } catch (error) {
+      console.warn('⚠️ Mark all read error:', error);
     }
-  }, []); // eslint-disable-line
+  }, [loadNotifications]);
+
+  // ✅ حذف إشعار
+  const handleDelete = useCallback(async (id) => {
+    try {
+      await notificationService.deleteNotification(id);
+      loadNotifications();
+    } catch (error) {
+      console.warn('⚠️ Delete notification error:', error);
+    }
+  }, [loadNotifications]);
+
+  // ✅ حذف الكل (المقروءة فقط)
+  const handleClearAll = useCallback(async () => {
+    if (window.confirm(lang === 'ar' ? 'هل أنت متأكد من حذف كل الإشعارات المقروءة؟' : 'Are you sure you want to clear all read notifications?')) {
+      try {
+        await notificationService.clearAll();
+        loadNotifications();
+      } catch (error) {
+        console.warn('⚠️ Clear all error:', error);
+      }
+    }
+  }, [lang, loadNotifications]);
+
+  // ✅ تحميل عند الفتح
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   // Filters
-  const unreadCount = notifications.filter(n => !n.read).length;
   const filteredNotifications = filter === 'unread' 
-    ? notifications.filter(n => !n.read)
+    ? notifications.filter(n => !n.is_read)
     : notifications;
 
   // Get notification icon and color
   const getNotificationStyle = (type) => {
     const styles = {
-      booking_accepted: { icon: <CheckCircle size={20} />, color: '#059669', bg: 'rgba(5,150,105,0.1)' },
-      booking_rejected: { icon: <XCircle size={20} />, color: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
-      booking_reminder: { icon: <Calendar size={20} />, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-      craftsman_on_way: { icon: <Zap size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-      payment_reminder: { icon: <DollarSign size={20} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
-      new_message_customer: { icon: <MessageCircle size={20} />, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-      promotion_customer: { icon: <Megaphone size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-      service_completed: { icon: <Award size={20} />, color: '#059669', bg: 'rgba(5,150,105,0.1)' },
-      new_request: { icon: <Bell size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-      new_review: { icon: <Star size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-      job_reminder: { icon: <Clock size={20} />, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-      payment_received: { icon: <DollarSign size={20} />, color: '#059669', bg: 'rgba(5,150,105,0.1)' },
-      new_message_craftsman: { icon: <MessageCircle size={20} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
-      promotion_craftsman: { icon: <TrendingUp size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-      profile_viewed: { icon: <Eye size={20} />, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+      NewBookingNotification: { icon: <Bell size={20} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+      BookingStatusUpdatedNotification: { icon: <CheckCircle size={20} />, color: '#059669', bg: 'rgba(5,150,105,0.1)' },
+      NewCraftsmanRegistrationNotification: { icon: <Sparkles size={20} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+      NewServicePostNotification: { icon: <Megaphone size={20} />, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+      NewPostResponseNotification: { icon: <MessageCircle size={20} />, color: '#ec4899', bg: 'rgba(236,72,153,0.1)' },
+      NewMessageNotification: { icon: <MessageCircle size={20} />, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
     };
     return styles[type] || { icon: <Bell size={20} />, color: '#94a3b8', bg: 'rgba(148,163,184,0.1)' };
   };
 
   // Format notification text
   const getNotificationText = (notif) => {
-    const { type, data } = notif;
-    const texts = {
-      booking_accepted: lang === 'ar' 
-        ? `✅ ${data.craftsmanName} قبل طلبك لخدمة ${data.service} - الموعد: ${data.date}`
-        : `✅ ${data.craftsmanName} accepted your ${data.service} request - ${data.date}`,
-      booking_rejected: lang === 'ar'
-        ? `❌ للأسف، ${data.craftsmanName} رفض طلبك لخدمة ${data.service}`
-        : `❌ Unfortunately, ${data.craftsmanName} rejected your ${data.service} request`,
-      booking_reminder: lang === 'ar'
-        ? `⏰ تذكير: موعدك مع ${data.craftsmanName} لخدمة ${data.service} ${data.date}`
-        : `⏰ Reminder: Your ${data.service} appointment with ${data.craftsmanName} is ${data.date}`,
-      craftsman_on_way: lang === 'ar'
-        ? `🚀 ${data.craftsmanName} في الطريق إليك! يصل خلال ${data.time}`
-        : `🚀 ${data.craftsmanName} is on the way! Arriving in ${data.time}`,
-      payment_reminder: lang === 'ar'
-        ? `💳 متنساش تدفع ${data.amount || ''} جنيه للصنايعي`
-        : `💳 Don't forget to pay ${data.amount || ''} EGP to the craftsman`,
-      new_message_customer: lang === 'ar'
-        ? `💬 رسالة جديدة من ${data.from}: "${data.preview}"`
-        : `💬 New message from ${data.from}: "${data.preview}"`,
-      promotion_customer: lang === 'ar'
-        ? `🎉 ${data.title}! ${data.desc}`
-        : `🎉 ${data.title}! ${data.desc}`,
-      service_completed: lang === 'ar'
-        ? `🌟 تم إتمام خدمة ${data.service} مع ${data.craftsmanName} - قيم الخدمة!`
-        : `🌟 ${data.service} service completed with ${data.craftsmanName} - Rate it!`,
-      new_request: lang === 'ar'
-        ? `🆕 طلب ${data.service} جديد من ${data.customerName} في ${data.location} - ${data.budget} ج`
-        : `🆕 New ${data.service} request from ${data.customerName} in ${data.location} - ${data.budget} EGP`,
-      new_review: lang === 'ar'
-        ? `⭐ ${data.customerName} قيمك ${'★'.repeat(data.rating)} - "${data.comment}"`
-        : `⭐ ${data.customerName} rated you ${'★'.repeat(data.rating)} - "${data.comment}"`,
-      job_reminder: lang === 'ar'
-        ? `⏰ تذكير: عندك معاد ${data.service || 'خدمة'} ${data.date || 'قريب'}`
-        : `⏰ Reminder: You have a ${data.service || 'service'} appointment ${data.date || 'soon'}`,
-      payment_received: lang === 'ar'
-        ? `💰 استلمت ${data.amount} ج من ${data.customerName} عن خدمة ${data.service}`
-        : `💰 Received ${data.amount} EGP from ${data.customerName} for ${data.service}`,
-      new_message_craftsman: lang === 'ar'
-        ? `💬 رسالة جديدة من ${data.from}: "${data.preview}"`
-        : `💬 New message from ${data.from}: "${data.preview}"`,
-      promotion_craftsman: lang === 'ar'
-        ? `🚀 ${data.title}! ${data.desc}`
-        : `🚀 ${data.title}! ${data.desc}`,
-      profile_viewed: lang === 'ar'
-        ? `👁️ ${data.count} شخص شاف ملفك ${data.period}`
-        : `👁️ ${data.count} people viewed your profile ${data.period}`,
-    };
-    return texts[type] || '';
+    return notif.data?.message || '';
   };
 
   // Format time
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
@@ -203,14 +134,16 @@ const NotificationsViewPage = () => {
     title: lang === 'ar' ? 'الإشعارات' : 'Notifications',
     subtitle: role === 'customer' 
       ? (lang === 'ar' ? 'إشعارات طلباتك وخدماتك' : 'Your requests and services notifications')
-      : (lang === 'ar' ? 'إشعارات طلباتك وتقييماتك' : 'Your requests and reviews notifications'),
+      : (role === 'craftsman' 
+        ? (lang === 'ar' ? 'إشعارات طلباتك وتقييماتك' : 'Your requests and reviews notifications')
+        : (lang === 'ar' ? 'إشعارات المنصة' : 'Platform notifications')
+      ),
     all: lang === 'ar' ? 'الكل' : 'All',
     unread: lang === 'ar' ? 'غير مقروءة' : 'Unread',
     markAllRead: lang === 'ar' ? 'تعليم الكل كمقروء' : 'Mark all as read',
-    clearAll: lang === 'ar' ? 'حذف الكل' : 'Clear All',
+    clearAll: lang === 'ar' ? 'حذف المقروءة' : 'Clear Read',
     noNotifications: lang === 'ar' ? 'لا توجد إشعارات' : 'No notifications',
     noNotificationsDesc: lang === 'ar' ? 'كل الإشعارات هتظهر هنا أول ما توصل' : 'All notifications will appear here once they arrive',
-    unreadCount: (count) => lang === 'ar' ? `${count} غير مقروءة` : `${count} unread`,
   };
 
   // Dynamic colors
@@ -221,7 +154,7 @@ const NotificationsViewPage = () => {
   const borderColor = darkMode ? '#334155' : '#e2e8f0';
 
   return (
-    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
+    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -339,7 +272,7 @@ const NotificationsViewPage = () => {
                 <Check size={14} />{t.markAllRead}
               </button>
             )}
-            {notifications.length > 0 && (
+            {notifications.filter(n => n.is_read).length > 0 && (
               <button onClick={handleClearAll}
                 style={{
                   padding: '8px 14px', borderRadius: '10px', border: `1px solid ${borderColor}`,
@@ -366,16 +299,16 @@ const NotificationsViewPage = () => {
               const style = getNotificationStyle(notif.type);
               return (
                 <div key={notif.id}
-                  className={`notification-item animate-slide-left ${!notif.read ? 'unread' : ''}`}
+                  className={`notification-item animate-slide-left ${!notif.is_read ? 'unread' : ''}`}
                   style={{
-                    background: !notif.read ? cardBg : (darkMode ? '#1e293b' : '#f8fafc'),
+                    background: !notif.is_read ? cardBg : (darkMode ? '#1e293b' : '#f8fafc'),
                     borderRadius: '14px', padding: '16px 20px',
                     border: `1px solid ${borderColor}`,
-                    cursor: 'pointer', opacity: notif.read ? 0.7 : 1,
+                    cursor: 'pointer', opacity: notif.is_read ? 0.7 : 1,
                     animationDelay: `${index * 0.08}s`,
                     display: 'flex', gap: '14px', alignItems: 'flex-start',
                   }}
-                  onClick={() => !notif.read && handleMarkAsRead(notif.id)}
+                  onClick={() => !notif.is_read && handleMarkAsRead(notif.id)}
                 >
                   <div style={{
                     width: '44px', height: '44px', borderRadius: '12px',
@@ -390,7 +323,7 @@ const NotificationsViewPage = () => {
                     <p style={{
                       fontSize: '0.9rem', color: textColor,
                       lineHeight: 1.6, margin: '0 0 4px',
-                      fontWeight: !notif.read ? 600 : 400,
+                      fontWeight: !notif.is_read ? 600 : 400,
                     }}>
                       {getNotificationText(notif)}
                     </p>
@@ -399,12 +332,12 @@ const NotificationsViewPage = () => {
                       display: 'flex', alignItems: 'center', gap: '6px',
                     }}>
                       <Clock size={12} />
-                      {formatTime(notif.createdAt)}
+                      {formatTime(notif.created_at)}
                     </span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    {!notif.read && (
+                    {!notif.is_read && (
                       <button onClick={(e) => { e.stopPropagation(); handleMarkAsRead(notif.id); }}
                         style={{
                           width: '32px', height: '32px', borderRadius: '8px',

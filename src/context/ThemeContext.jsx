@@ -1,3 +1,4 @@
+// src/context/ThemeContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const ThemeContext = createContext();
@@ -26,11 +27,9 @@ export const ThemeProvider = ({ children }) => {
     
     if (darkMode) {
       root.classList.add('dark');
-      document.body.classList.add('dark-mode');
       root.style.colorScheme = 'dark';
     } else {
       root.classList.remove('dark');
-      document.body.classList.remove('dark-mode');
       root.style.colorScheme = 'light';
     }
   }, [darkMode]);
@@ -39,9 +38,8 @@ export const ThemeProvider = ({ children }) => {
 
   const value = {
     darkMode,
-    toggleTheme,
     isDark: darkMode,
-    setDarkMode
+    toggleTheme,
   };
 
   return (

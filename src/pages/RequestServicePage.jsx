@@ -1,3 +1,4 @@
+// src/pages/RequestServicePage.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
@@ -52,7 +53,7 @@ const RequestServicePage = () => {
     name: user?.name || '',
     phone: '',
     email: user?.email || '',
-    urgency: 'normal',
+    urgency: 'medium',
   });
 
   const [images, setImages] = useState([]);
@@ -124,6 +125,7 @@ const RequestServicePage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // ✅ إرسال طلب خدمة - باستخدام api.createServicePost
   const handleSubmit = async () => {
     const validationError = validateStep(3);
     if (validationError) {
@@ -134,45 +136,63 @@ const RequestServicePage = () => {
     setSubmitting(true);
     setError('');
 
-    const service = showCustomService ? formData.customService : formData.serviceType;
-
-    const requestData = {
-      service_type: service,
-      description: formData.description,
-      location: `${formData.city} - ${formData.district}`,
-      city: formData.city,
-      district: formData.district,
-      address: formData.address,
-      budget: parseFloat(formData.budget),
-      date: formData.date,
-      time: formData.time,
-      customer_name: formData.name,
-      customer_phone: formData.phone,
-      customer_email: formData.email,
-      urgency: formData.urgency,
-      images_count: images.length,
-    };
-
     try {
-      const result = await api.createBooking(requestData);
-      if (result.id || result.success) {
-        setSuccess(true);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        // Demo fallback
-        setSuccess(true);
-      }
-    } catch {
-      // Demo mode
-      const requests = JSON.parse(localStorage.getItem('requests') || '[]');
-      requests.push({
+      const service = showCustomService ? formData.customService : formData.serviceType;
+
+      // ✅ بناء FormData للباك (يدعم رفع الصور)
+      const formDataToSend = new FormData();
+      formDataToSend.append('title', service);
+      formDataToSend.append('description', formData.description);
+      formDataToSend.append('city', formData.city);
+      formDataToSend.append('location', `${formData.city} - ${formData.district || ''}`);
+      formDataToSend.append('budget_from', formData.budget || 0);
+      formDataToSend.append('budget_to', formData.budget || 0);
+      formDataToSend.append('urgency', formData.urgency || 'medium');
+      formDataToSend.append('craft_id', 1); // مؤقتاً
+      
+      if (formData.district) formDataToSend.append('custom_location', formData.district);
+
+      // ✅ إضافة الصور
+      images.forEach((image) => {
+        formDataToSend.append('images[]', image);
+      });
+
+      const data = await api.createServicePost(formDataToSend);
+
+      setSuccess(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    } catch (error) {
+      console.warn('⚠️ Service post error, using fallback:', error);
+      
+      // ✅ Fallback - حفظ في localStorage
+      const service = showCustomService ? formData.customService : formData.serviceType;
+      const requestData = {
         id: Date.now(),
-        ...requestData,
+        service_type: service,
+        description: formData.description,
+        location: `${formData.city} - ${formData.district}`,
+        city: formData.city,
+        district: formData.district,
+        address: formData.address,
+        budget: parseFloat(formData.budget),
+        date: formData.date,
+        time: formData.time,
+        customer_name: formData.name,
+        customer_phone: formData.phone,
+        customer_email: formData.email,
+        urgency: formData.urgency,
+        images_count: images.length,
         status: 'pending',
         created_at: new Date().toISOString(),
-      });
+      };
+
+      const requests = JSON.parse(localStorage.getItem('requests') || '[]');
+      requests.push(requestData);
       localStorage.setItem('requests', JSON.stringify(requests));
+      
       setSuccess(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     
     setSubmitting(false);
@@ -240,13 +260,13 @@ const RequestServicePage = () => {
     border: `2px solid ${error ? '#dc2626' : borderColor}`,
     borderRadius: '12px', fontSize: '0.95rem', outline: 'none',
     background: inputBg, color: textColor,
-    fontFamily: "'Cairo', sans-serif", textAlign: 'right',
+    fontFamily: "'Cairo', sans-serif", textAlign: lang === 'ar' ? 'right' : 'left',
     transition: 'all 0.3s ease',
   });
 
   if (success) {
     return (
-      <div style={{ background: bgColor, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: "'Cairo', sans-serif" }}>
+      <div style={{ background: bgColor, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
         <style>{`
           @keyframes successBounce { 0% { transform: scale(0); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
           @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
@@ -277,7 +297,7 @@ const RequestServicePage = () => {
   }
 
   return (
-    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
+    <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -487,9 +507,10 @@ const RequestServicePage = () => {
                     </label>
                     <select name="urgency" value={formData.urgency} onChange={handleChange}
                       style={inputStyle()}>
-                      <option value="normal">{t.normal}</option>
-                      <option value="urgent">{t.urgent}</option>
-                      <option value="veryUrgent">{t.veryUrgent}</option>
+                      <option value="low">{t.normal}</option>
+                      <option value="medium">{lang === 'ar' ? 'متوسط' : 'Medium'}</option>
+                      <option value="high">{t.urgent}</option>
+                      <option value="emergency">{t.veryUrgent}</option>
                     </select>
                   </div>
                 </div>

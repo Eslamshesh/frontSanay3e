@@ -1,9 +1,9 @@
+// src/components/Layout/Header.jsx
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
-import api from '../../services/api';
 import { Wrench, Moon, Sun, Globe, Download, LogOut, Bell, Search, Star } from 'lucide-react';
 
 const Header = () => {
@@ -47,25 +47,34 @@ const Header = () => {
   // Close mobile on route change
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
-  // Unread count
+  // ✅ جلب عدد الإشعارات غير المقروءة من notificationService
   useEffect(() => {
-    if (isAuthenticated && user?.email) {
+    if (isAuthenticated) {
       const updateCount = async () => {
         try {
-          const data = await api.getUnreadNotificationsCount();
-          setUnreadCount(data.count || 0);
-        } catch {
-          const role = user?.role || 'customer';
-          setUnreadCount(notificationService.getUnreadCount(user.email, role));
+          const count = await notificationService.getUnreadCount();
+          setUnreadCount(count);
+        } catch (error) {
+          console.warn('⚠️ Error fetching unread count:', error);
+          setUnreadCount(0);
         }
       };
+      
       updateCount();
-      const handleNew = () => updateCount();
-      window.addEventListener('newNotification', handleNew);
-      const interval = setInterval(updateCount, 10000);
-      return () => { window.removeEventListener('newNotification', handleNew); clearInterval(interval); };
+      
+      // تحديث كل 30 ثانية
+      const interval = setInterval(updateCount, 30000);
+      
+      // تحديث عند وصول إشعار جديد
+      const handleNewNotification = () => updateCount();
+      window.addEventListener('newNotification', handleNewNotification);
+      
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('newNotification', handleNewNotification);
+      };
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated]);
 
   // ✅ مختفي في صفحات الأدمن
   if (location.pathname.startsWith('/admin')) return null;
