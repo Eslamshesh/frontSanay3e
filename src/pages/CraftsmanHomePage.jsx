@@ -3,11 +3,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import ChatWindow from '../components/Chat/ChatWindow';
 import notificationService from '../services/notificationService';
 import api from '../services/api';
 import { 
-  MessageCircle, Phone, Star, MapPin, Calendar,
+  Phone, Star, MapPin, Calendar,
   Clock, CheckCircle, XCircle, TrendingUp,
   Users, Wrench, DollarSign, ArrowRight,
   Bell, Settings, Award, BarChart3, Loader,
@@ -30,8 +29,6 @@ const CraftsmanHomePage = () => {
     reviews_count: 0,
     is_featured: false
   });
-  const [activeChat, setActiveChat] = useState(null);
-  const [chatMinimized, setChatMinimized] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [feedbackMessage, setFeedbackMessage] = useState('');
 
@@ -180,14 +177,6 @@ const CraftsmanHomePage = () => {
     setActionLoading(prev => ({ ...prev, [bookingId]: null }));
   };
 
-  // Open chat
-  const handleOpenChat = (request) => {
-    setActiveChat({
-      name: request.customer_name || (lang === 'ar' ? 'عميل' : 'Customer'),
-      email: request.customer_email || `customer_${request.id}@demo.com`,
-    });
-  };
-
   // Translations
   const t = {
     welcome: lang === 'ar' ? 'مرحباً' : 'Welcome',
@@ -205,7 +194,6 @@ const CraftsmanHomePage = () => {
     quickLinks: lang === 'ar' ? 'روابط سريعة' : 'Quick Links',
     profile: lang === 'ar' ? 'الملف الشخصي' : 'Profile',
     subscriptions: lang === 'ar' ? 'الاشتراكات' : 'Subscriptions',
-    chat: lang === 'ar' ? 'محادثة' : 'Chat',
     accept: lang === 'ar' ? 'قبول' : 'Accept',
     reject: lang === 'ar' ? 'رفض' : 'Reject',
     accepting: lang === 'ar' ? 'جاري...' : '...',
@@ -449,19 +437,7 @@ const CraftsmanHomePage = () => {
                     </div>
 
                     <div className="request-actions" style={{ display: 'flex', gap: '8px' }}>
-                      {/* Chat Button */}
-                      <button onClick={() => handleOpenChat(r)} style={{
-                        display: 'flex', alignItems: 'center', gap: '4px',
-                        padding: '8px 14px', borderRadius: '10px',
-                        border: '1px solid #8b5cf6', background: 'transparent',
-                        color: '#8b5cf6', cursor: 'pointer', fontSize: '0.8rem',
-                        fontWeight: 600, fontFamily: "'Cairo', sans-serif", transition: 'all 0.3s ease',
-                      }}
-                      onMouseEnter={(e) => { e.target.style.background = '#8b5cf6'; e.target.style.color = 'white'; }}
-                      onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#8b5cf6'; }}>
-                        <MessageCircle size={14} />
-                        {t.chat}
-                      </button>
+                      {/* ❌ تم إزالة زر الشات */}
 
                       {/* Reject Button */}
                       <button 
@@ -592,16 +568,6 @@ const CraftsmanHomePage = () => {
           </div>
         </div>
       </div>
-
-      {/* Chat Window */}
-      {activeChat && (
-        <ChatWindow
-          otherUser={activeChat}
-          onClose={() => setActiveChat(null)}
-          minimized={chatMinimized}
-          onMinimize={() => setChatMinimized(!chatMinimized)}
-        />
-      )}
     </div>
   );
 };

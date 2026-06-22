@@ -2,14 +2,14 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../services/api';
 
-const AuthContext = createContext();
-
+// ✅ تصدير useAuth كـ named export
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 };
 
+// ✅ تصدير AuthProvider كـ named export
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -24,7 +24,6 @@ export const AuthProvider = ({ children }) => {
       
       if (savedToken && savedUser) {
         try {
-          // ✅ محاولة جلب البيانات من الباك
           const data = await api.getMe();
           const userData = {
             id: data.user.id,
@@ -40,20 +39,18 @@ export const AuthProvider = ({ children }) => {
           setIsAuthenticated(true);
           localStorage.setItem('user', JSON.stringify(userData));
           localStorage.setItem('userRole', data.user.role);
-        } catch (error) {
-          // ✅ لو الباك مش شغال، استخدم البيانات المحفوظة
-          console.warn('⚠️ Backend not available, using saved user data');
-          try {
-            const savedUserData = JSON.parse(savedUser);
-            setUser(savedUserData);
-            setIsAuthenticated(true);
-          } catch {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            localStorage.removeItem('userRole');
-            setUser(null);
-            setIsAuthenticated(false);
+          
+          if (data.user.role === 'craftsman' && data.user.craftsman?.id) {
+            localStorage.setItem('craftsmanId', data.user.craftsman.id.toString());
           }
+        } catch (error) {
+          console.warn('⚠️ Backend not available, clearing session');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('craftsmanId');
+          setUser(null);
+          setIsAuthenticated(false);
         }
       }
       setLoading(false);
@@ -62,20 +59,121 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  // ✅ تسجيل الدخول - بدون navigate
+  // ============================================================
+  // ✅ تسجيل الدخول - مع دعم البيانات التجريبية
+  // ============================================================
   const login = async (email, password) => {
     setError(null);
     setLoading(true);
 
     try {
-      // ✅ محاولة الاتصال بالباك أولاً
-      const data = await api.login(email, password);
+      // ✅ التحقق من البيانات التجريبية أولاً (لو الباك مش شغال)
+      // ده مش هيأثر على التسجيل العادي، لأنه بيحصل قبل محاولة الـ API
+      
+      // ✅ بيانات عميل تجريبي
+      if (email === 'client@demo.com' && password === '12345678') {
+        const userData = {
+          id: 999,
+          name: 'عميل تجريبي',
+          email: 'client@demo.com',
+          role: 'client',
+          avatar: null,
+          phone: '01001234567',
+          craftsman: null,
+          email_verified_at: new Date().toISOString(),
+        };
+        
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', 'demo-token-client');
+        localStorage.setItem('userRole', 'client');
+        
+        setUser(userData);
+        setIsAuthenticated(true);
+        setLoading(false);
+        
+        return { 
+          success: true, 
+          user: userData, 
+          role: 'client',
+          needsVerification: false,
+          token: 'demo-token-client',
+        };
+      }
 
+      // ✅ بيانات حرفي تجريبي
+      if (email === 'craftsman@demo.com' && password === '12345678') {
+        const userData = {
+          id: 998,
+          name: 'حرفي تجريبي',
+          email: 'craftsman@demo.com',
+          role: 'craftsman',
+          avatar: null,
+          phone: '01001234568',
+          craftsman: { id: 999 },
+          email_verified_at: new Date().toISOString(),
+        };
+        
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', 'demo-token-craftsman');
+        localStorage.setItem('userRole', 'craftsman');
+        localStorage.setItem('craftsmanId', '999');
+        
+        setUser(userData);
+        setIsAuthenticated(true);
+        setLoading(false);
+        
+        return { 
+          success: true, 
+          user: userData, 
+          role: 'craftsman',
+          needsVerification: false,
+          token: 'demo-token-craftsman',
+        };
+      }
+
+      // ✅ بيانات أدمن تجريبي (اختياري)
+      if (email === 'admin@demo.com' && password === '12345678') {
+        const userData = {
+          id: 997,
+          name: 'أدمن تجريبي',
+          email: 'admin@demo.com',
+          role: 'admin',
+          avatar: null,
+          phone: '01001234569',
+          craftsman: null,
+          email_verified_at: new Date().toISOString(),
+        };
+        
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('token', 'demo-token-admin');
+        localStorage.setItem('userRole', 'admin');
+        
+        setUser(userData);
+        setIsAuthenticated(true);
+        setLoading(false);
+        
+        return { 
+          success: true, 
+          user: userData, 
+          role: 'admin',
+          needsVerification: false,
+          token: 'demo-token-admin',
+        };
+      }
+
+      // ============================================================
+      // ✅ تسجيل الدخول العادي - من الـ API
+      // ============================================================
+      
+      const data = await api.login(email, password);
+      
+      const userRole = data.user?.role || 'client';
+      
       const userData = {
         id: data.user.id,
         name: data.user.name,
         email: data.user.email,
-        role: data.user.role,
+        role: userRole,
         avatar: data.user.avatar_url || null,
         phone: data.user.phone || null,
         craftsman: data.user.craftsman || null,
@@ -84,13 +182,16 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('token', data.token);
-      localStorage.setItem('userRole', data.user.role);
+      localStorage.setItem('userRole', userRole);
+      
+      if (userRole === 'craftsman' && data.user.craftsman?.id) {
+        localStorage.setItem('craftsmanId', data.user.craftsman.id.toString());
+      }
 
       setUser(userData);
       setIsAuthenticated(true);
       setLoading(false);
 
-      // ✅ التحقق من البريد - بدون navigate
       const needsVerification = data.user.email_verified_at === null;
       
       if (needsVerification) {
@@ -100,54 +201,20 @@ export const AuthProvider = ({ children }) => {
       return { 
         success: true, 
         user: userData, 
-        role: data.user.role,
+        role: userRole,
         needsVerification: needsVerification,
         token: data.token,
       };
 
     } catch (err) {
-      // ✅ لو الباك مش شغال، استخدم Mock Data
-      console.warn('⚠️ Backend not available, using mock login');
-
-      // تحديد الدور بناءً على الإيميل
-      let role = 'customer';
-      let name = 'محمد العميل';
-      if (email.includes('craftsman')) {
-        role = 'craftsman';
-        name = 'أحمد الحرفي';
-      } else if (email.includes('admin')) {
-        role = 'admin';
-        name = 'مدير النظام';
-      }
-
-      // ✅ بيانات وهمية
-      const mockUser = {
-        id: Math.floor(Math.random() * 1000) + 1,
-        name: name,
-        email: email,
-        role: role,
-        avatar: null,
-        phone: '01012345678',
-        craftsman: role === 'craftsman' ? { id: 1, crafts: [{ id: 1, name: 'نجار' }] } : null,
-        email_verified_at: new Date().toISOString(), // ✅ مفعل افتراضياً في Mock
-      };
-
-      const mockToken = 'mock_token_' + Math.random().toString(36).substring(7);
-
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('userRole', role);
-
-      setUser(mockUser);
-      setIsAuthenticated(true);
+      console.error('❌ Login failed:', err);
+      setError(err.message || 'حدث خطأ في تسجيل الدخول');
       setLoading(false);
-
+      
       return { 
-        success: true, 
-        user: mockUser, 
-        role: role,
-        needsVerification: false,
-        token: mockToken,
+        success: false, 
+        message: err.message || 'حدث خطأ في تسجيل الدخول',
+        role: null,
       };
     }
   };
@@ -162,6 +229,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('craftsmanId');
       localStorage.removeItem('pendingVerificationEmail');
       setUser(null);
       setIsAuthenticated(false);
@@ -175,7 +243,7 @@ export const AuthProvider = ({ children }) => {
     setUser(updated);
   };
 
-  const isCustomer = user?.role === 'customer';
+  const isCustomer = user?.role === 'client' || user?.role === 'customer';
   const isCraftsman = user?.role === 'craftsman';
   const isAdmin = user?.role === 'admin';
 
@@ -190,9 +258,15 @@ export const AuthProvider = ({ children }) => {
     isCustomer,
     isCraftsman,
     isAdmin,
+    getToken: () => localStorage.getItem('token'),
+    getCraftsmanId: () => localStorage.getItem('craftsmanId'),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// ✅ إنشاء AuthContext
+const AuthContext = createContext();
+
+// ✅ تصدير افتراضي للتوافق
 export default AuthContext;

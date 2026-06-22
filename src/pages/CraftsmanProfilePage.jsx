@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ImageUploader from '../components/Upload/ImageUploader';
 import { 
@@ -14,13 +15,15 @@ import {
 } from 'lucide-react';
 
 const CraftsmanProfilePage = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
   const { darkMode } = useTheme();
+  const navigate = useNavigate();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [avatar, setAvatar] = useState(null);
   const [portfolioImages, setPortfolioImages] = useState([]);
   const [stats, setStats] = useState({
@@ -32,6 +35,14 @@ const CraftsmanProfilePage = () => {
     is_featured: false,
   });
   const fileInputRef = useRef(null);
+
+  // Password change states
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [profile, setProfile] = useState({
     firstName: user?.name?.split(' ')[0] || '',
@@ -48,7 +59,9 @@ const CraftsmanProfilePage = () => {
     yearsExp: '',
   });
 
-  // Language
+  // ============================================================
+  // 🌍 Language
+  // ============================================================
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
@@ -57,7 +70,9 @@ const CraftsmanProfilePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
+  // ============================================================
   // ✅ جلب بيانات الحرفي والإحصائيات من API
+  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -66,7 +81,7 @@ const CraftsmanProfilePage = () => {
         const statsData = await api.getCraftsmanStats();
         setStats(statsData.stats || {});
         
-        // ✅ جلب بيانات المستخدم من الباك
+        // جلب بيانات المستخدم من الباك
         const userData = await api.getMe();
         if (userData.user) {
           const u = userData.user;
@@ -83,7 +98,6 @@ const CraftsmanProfilePage = () => {
         }
       } catch (error) {
         console.warn('⚠️ Using fallback data:', error);
-        // Fallback data
         const savedProfile = localStorage.getItem('craftsmanProfile');
         if (savedProfile) {
           try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
@@ -100,6 +114,9 @@ const CraftsmanProfilePage = () => {
     loadData();
   }, []);
 
+  // ============================================================
+  // 📝 Translations
+  // ============================================================
   const t = {
     profile: lang === 'ar' ? 'الملف الشخصي' : 'Profile',
     craftsman: lang === 'ar' ? 'حرفي' : 'Craftsman',
@@ -140,49 +157,140 @@ const CraftsmanProfilePage = () => {
     pending: lang === 'ar' ? 'قيد الانتظار' : 'Pending',
     rating: lang === 'ar' ? 'التقييم' : 'Rating',
     featured: lang === 'ar' ? 'مميز' : 'Featured',
+    error: lang === 'ar' ? 'حدث خطأ' : 'Error',
+    passwordChanged: lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully',
+    fillFields: lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields',
+    passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
+    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters',
   };
 
+  // ============================================================
+  // 🎨 Handlers
+  // ============================================================
   const handleChange = (e) => {
     const { name, value } = e.target;
     setProfile(prev => ({ ...prev, [name]: value }));
+    if (error) setError('');
+    if (success) setSuccess('');
   };
 
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatar(reader.result);
-        localStorage.setItem('craftsmanAvatar', reader.result);
-      };
-      reader.readAsDataURL(file);
+  // ============================================================
+  // ✅ دوال رفع الصور
+  // ============================================================
+
+  /**
+   * رفع صورة واحدة إلى السيرفر
+   * @param {File} file - ملف الصورة
+   * @param {string} type - نوع الصورة (avatar, profile_photo, portfolio)
+   * @returns {Promise<Object|null>}
+   */
+  const uploadImage = async (file, type = 'avatar') => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const data = await api.uploadImage(file, type);
+      
+      if (type === 'avatar' || type === 'profile_photo') {
+        setAvatar(data.url);
+        setSuccess('تم تحديث الصورة الشخصية بنجاح');
+      }
+      
+      if (type === 'portfolio') {
+        const newImage = {
+          id: data.id || Date.now(),
+          url: data.url,
+          name: data.name || 'صورة',
+          date: new Date().toISOString(),
+        };
+        setPortfolioImages(prev => [...prev, newImage]);
+        setSuccess('تم إضافة الصورة بنجاح');
+      }
+      
+      setTimeout(() => setSuccess(''), 3000);
+      return data;
+      
+    } catch (error) {
+      console.error('❌ Upload error:', error);
+      setError(error.message || 'حدث خطأ في رفع الصورة');
+      return null;
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handlePortfolioUpload = (files) => {
-    const newImages = files.map(file => ({
-      id: Date.now() + Math.random(),
-      url: URL.createObjectURL(file),
-      name: file.name,
-      date: new Date().toISOString(),
-    }));
-    const updated = [...portfolioImages, ...newImages];
-    setPortfolioImages(updated);
-    const toSave = updated.map(img => ({ id: img.id, name: img.name, date: img.date }));
-    localStorage.setItem('craftsmanPortfolio', JSON.stringify(toSave));
+  /**
+   * رفع صورة الملف الشخصي
+   */
+  const handleUploadAvatar = async (file) => {
+    if (!file) return;
+    
+    // معاينة مؤقتة
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatar(reader.result);
+    };
+    reader.readAsDataURL(file);
+    
+    await uploadImage(file, 'profile_photo');
   };
 
-  const removePortfolioImage = (id) => {
-    const updated = portfolioImages.filter(img => img.id !== id);
-    setPortfolioImages(updated);
-    const toSave = updated.map(img => ({ id: img.id, name: img.name, date: img.date }));
-    localStorage.setItem('craftsmanPortfolio', JSON.stringify(toSave));
+  /**
+   * رفع عدة صور للمعرض
+   */
+  const handleUploadMultiplePortfolio = async (files) => {
+    if (!files || files.length === 0) return;
+    
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const data = await api.uploadMultiple(files, 'portfolio');
+      
+      const newImages = (data.uploads || data.images || []).map(img => ({
+        id: img.id || Date.now() + Math.random(),
+        url: img.url || img.path,
+        name: img.name || 'صورة',
+        date: new Date().toISOString(),
+      }));
+      
+      setPortfolioImages(prev => [...prev, ...newImages]);
+      setSuccess(`تم إضافة ${newImages.length} صور بنجاح`);
+      setTimeout(() => setSuccess(''), 3000);
+      
+    } catch (error) {
+      console.error('❌ Error uploading multiple images:', error);
+      setError(error.message || 'حدث خطأ في رفع الصور');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ✅ حفظ الملف الشخصي - باستخدام api.updateCraftsmanProfile
+  // ============================================================
+  // ✅ تحديث دوال معالجة الصور
+  // ============================================================
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      await handleUploadAvatar(file);
+    }
+  };
+
+  const handlePortfolioUpload = async (files) => {
+    await handleUploadMultiplePortfolio(files);
+  };
+
+  // ============================================================
+  // ✅ حفظ الملف الشخصي
+  // ============================================================
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setSuccess('');
 
     try {
       const formData = new FormData();
@@ -191,14 +299,15 @@ const CraftsmanProfilePage = () => {
       if (profile.city) formData.append('city', profile.city);
       if (profile.district) formData.append('district', profile.district);
       if (profile.phone) formData.append('phone', profile.phone);
+      if (profile.whatsapp) formData.append('whatsapp', profile.whatsapp);
+      if (profile.yearsExp) formData.append('years_experience', profile.yearsExp);
+      
       if (avatar && avatar.startsWith('data:')) {
-        // تحويل base64 إلى file
         const res = await fetch(avatar);
         const blob = await res.blob();
         formData.append('profile_photo', blob, 'avatar.jpg');
       }
       
-      // المهارات
       if (profile.profession) {
         const skills = profile.profession.split(',').map(s => s.trim());
         skills.forEach(skill => formData.append('skills[]', skill));
@@ -206,35 +315,122 @@ const CraftsmanProfilePage = () => {
 
       const data = await api.updateCraftsmanProfile(formData);
       
-      // تحديث بيانات المستخدم في Context
       if (data.craftsman) {
         updateUser({ craftsman: data.craftsman });
       }
       
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setSuccess(t.saved);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      console.warn('⚠️ Save error, using localStorage fallback:', error);
-      // Fallback - حفظ في localStorage
+      console.error('❌ Save error:', error);
+      setError(error.message || 'حدث خطأ في حفظ التغييرات');
       localStorage.setItem('craftsmanProfile', JSON.stringify(profile));
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
     }
     setLoading(false);
   };
 
-  // Dynamic colors
+  // ============================================================
+  // ✅ حذف صورة من المعرض
+  // ============================================================
+  const removePortfolioImage = async (id) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await api.deletePortfolioImage(id);
+      setPortfolioImages(prev => prev.filter(img => img.id !== id));
+      setSuccess('تم حذف الصورة بنجاح');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      console.error('❌ Error deleting portfolio image:', error);
+      // Fallback - حذف محلي
+      setPortfolioImages(prev => prev.filter(img => img.id !== id));
+    }
+    setLoading(false);
+  };
+
+  // ============================================================
+  // ✅ تغيير كلمة المرور
+  // ============================================================
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError(t.fillFields);
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError(t.passwordMin);
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError(t.passwordMismatch);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await api.changePassword({
+        old_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirmation: confirmPassword,
+      });
+      
+      setSuccess(t.passwordChanged);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // ✅ حذف الحساب
+  // ============================================================
+  const handleDeleteAccount = async () => {
+    if (!window.confirm(t.deleteWarning)) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      await api.deleteAccount();
+      logout();
+      navigate('/');
+    } catch (error) {
+      setError(error.message || 'حدث خطأ في حذف الحساب');
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // 🎨 Dynamic Colors
+  // ============================================================
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
   const cardBg = darkMode ? '#1e293b' : '#ffffff';
   const textColor = darkMode ? '#f1f5f9' : '#0f172a';
   const textSecondary = darkMode ? '#94a3b8' : '#64748b';
   const borderColor = darkMode ? '#334155' : '#e2e8f0';
   const inputBg = darkMode ? '#0f172a' : '#ffffff';
+  const errorColor = '#ef4444';
+  const successColor = '#059669';
 
-  const inputStyle = {
+  const inputStyle = (hasError) => ({
     width: '100%',
     padding: '12px 16px',
-    border: `2px solid ${borderColor}`,
+    border: `2px solid ${hasError ? errorColor : borderColor}`,
     borderRadius: '10px',
     fontSize: '0.95rem',
     color: textColor,
@@ -243,7 +439,7 @@ const CraftsmanProfilePage = () => {
     fontFamily: "'Cairo', sans-serif",
     transition: 'all 0.3s ease',
     textAlign: lang === 'ar' ? 'right' : 'left',
-  };
+  });
 
   return (
     <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
@@ -266,7 +462,7 @@ const CraftsmanProfilePage = () => {
         }
       `}</style>
 
-      {/* Hero */}
+      {/* ===== Hero ===== */}
       <div style={{
         background: darkMode ? 'linear-gradient(160deg, #1e3a8a, #1e40af)' : 'linear-gradient(160deg, #2563eb, #1d4ed8)',
         color: 'white', padding: '48px 0', textAlign: 'center',
@@ -315,7 +511,7 @@ const CraftsmanProfilePage = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* ===== Stats Cards ===== */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 24px', marginTop: '-20px', position: 'relative', zIndex: 2 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
           {[
@@ -332,10 +528,45 @@ const CraftsmanProfilePage = () => {
         </div>
       </div>
 
-      {/* Content */}
+      {/* ===== Content ===== */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px' }}>
         
-        {/* Tabs */}
+        {/* ===== Messages ===== */}
+        {error && (
+          <div className="animate-fade-in" style={{
+            background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+            color: errorColor,
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid rgba(220,38,38,0.2)',
+          }}>
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="animate-fade-in" style={{
+            background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+            color: successColor,
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid rgba(5,150,105,0.2)',
+          }}>
+            <CheckCircle size={18} />
+            {success}
+          </div>
+        )}
+
+        {/* ===== Tabs ===== */}
         <div className="animate-fade-in-up" style={{
           display: 'flex', gap: '8px', marginBottom: '28px',
           background: cardBg, borderRadius: '14px', padding: '6px',
@@ -362,32 +593,20 @@ const CraftsmanProfilePage = () => {
           ))}
         </div>
 
-        {/* Info Tab */}
+        {/* ===== Info Tab ===== */}
         {activeTab === 'info' && (
           <div className="animate-fade-in-up">
-            {saved && (
-              <div style={{
-                background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
-                color: '#059669', padding: '14px 20px', borderRadius: '12px',
-                marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px',
-                border: '1px solid rgba(5,150,105,0.2)',
-              }}>
-                <CheckCircle size={20} />
-                {t.saved}
-              </div>
-            )}
-
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <form onSubmit={handleSave}>
                 {/* Names */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.firstName}</label>
-                    <input type="text" name="firstName" value={profile.firstName} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="firstName" value={profile.firstName} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.lastName}</label>
-                    <input type="text" name="lastName" value={profile.lastName} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="lastName" value={profile.lastName} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -395,11 +614,11 @@ const CraftsmanProfilePage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.email}</label>
-                    <input type="email" name="email" value={profile.email} onChange={handleChange} style={inputStyle} />
+                    <input type="email" name="email" value={profile.email} onChange={handleChange} style={inputStyle()} disabled />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.phone}</label>
-                    <input type="tel" name="phone" value={profile.phone} onChange={handleChange} style={inputStyle} />
+                    <input type="tel" name="phone" value={profile.phone} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -407,11 +626,11 @@ const CraftsmanProfilePage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.whatsapp}</label>
-                    <input type="tel" name="whatsapp" value={profile.whatsapp} onChange={handleChange} style={inputStyle} />
+                    <input type="tel" name="whatsapp" value={profile.whatsapp} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.profession}</label>
-                    <input type="text" name="profession" value={profile.profession} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="profession" value={profile.profession} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -419,11 +638,11 @@ const CraftsmanProfilePage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.city}</label>
-                    <input type="text" name="city" value={profile.city} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="city" value={profile.city} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.district}</label>
-                    <input type="text" name="district" value={profile.district} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="district" value={profile.district} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -434,7 +653,7 @@ const CraftsmanProfilePage = () => {
                     {t.bio}
                   </label>
                   <textarea name="bio" value={profile.bio} onChange={handleChange} rows="4"
-                    style={{ ...inputStyle, resize: 'vertical', minHeight: '100px' }}
+                    style={{ ...inputStyle(), resize: 'vertical', minHeight: '100px' }}
                     placeholder={lang === 'ar' ? 'اكتب نبذة عن خبراتك ومهاراتك...' : 'Write about your experience and skills...'}
                   />
                 </div>
@@ -443,11 +662,11 @@ const CraftsmanProfilePage = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.price} ({t.egp})</label>
-                    <input type="number" name="price" value={profile.price} onChange={handleChange} style={inputStyle} />
+                    <input type="number" name="price" value={profile.price} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{lang === 'ar' ? 'نوع التسعير' : 'Price Type'}</label>
-                    <select name="priceType" value={profile.priceType} onChange={handleChange} style={inputStyle}>
+                    <select name="priceType" value={profile.priceType} onChange={handleChange} style={inputStyle()}>
                       <option value="hour">{t.pricePerHour}</option>
                       <option value="meter">{t.pricePerMeter}</option>
                       <option value="job">{t.pricePerJob}</option>
@@ -455,7 +674,7 @@ const CraftsmanProfilePage = () => {
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.yearsExp}</label>
-                    <input type="number" name="yearsExp" value={profile.yearsExp} onChange={handleChange} style={inputStyle} />
+                    <input type="number" name="yearsExp" value={profile.yearsExp} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -475,7 +694,7 @@ const CraftsmanProfilePage = () => {
           </div>
         )}
 
-        {/* Portfolio Tab - نفس الكود */}
+        {/* ===== Portfolio Tab ===== */}
         {activeTab === 'portfolio' && (
           <div className="animate-fade-in-up">
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
@@ -485,7 +704,12 @@ const CraftsmanProfilePage = () => {
               </div>
               <p style={{ color: textSecondary, marginBottom: '24px', fontSize: '0.9rem' }}>{t.portfolioDesc}</p>
 
-              <ImageUploader onUpload={handlePortfolioUpload} multiple={true} maxFiles={10} />
+              <ImageUploader 
+                onUpload={handlePortfolioUpload} 
+                multiple={true} 
+                maxFiles={10} 
+                loading={loading}
+              />
 
               {portfolioImages.length > 0 && (
                 <div className="portfolio-grid" style={{
@@ -499,12 +723,14 @@ const CraftsmanProfilePage = () => {
                     }}>
                       <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button onClick={() => removePortfolioImage(img.id)}
+                        disabled={loading}
                         style={{
                           position: 'absolute', top: '8px', right: '8px',
                           width: '28px', height: '28px', borderRadius: '50%',
                           background: 'rgba(220,38,38,0.9)', color: 'white',
-                          border: 'none', cursor: 'pointer', display: 'flex',
-                          alignItems: 'center', justifyContent: 'center',
+                          border: 'none', cursor: loading ? 'default' : 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          opacity: loading ? 0.5 : 1,
                         }}>
                         <X size={14} />
                       </button>
@@ -523,35 +749,126 @@ const CraftsmanProfilePage = () => {
           </div>
         )}
 
-        {/* Settings Tab - نفس الكود */}
+        {/* ===== Settings Tab ===== */}
         {activeTab === 'settings' && (
           <div className="animate-fade-in-up">
+            {/* ===== Change Password ===== */}
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}`, marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: textColor, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Lock size={18} style={{ color: '#3b82f6' }} />
                 {t.changePassword}
               </h3>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.currentPassword}</label>
-                <input type="password" style={inputStyle} placeholder="••••••••" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.newPassword}</label>
-                  <input type="password" style={inputStyle} placeholder="••••••••" />
+
+              <form onSubmit={handleChangePassword}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.currentPassword}</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type={showCurrentPassword ? 'text' : 'password'} 
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      style={inputStyle()}
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: textSecondary,
+                      }}
+                    >
+                      {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.confirmPassword}</label>
-                  <input type="password" style={inputStyle} placeholder="••••••••" />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.newPassword}</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showNewPassword ? 'text' : 'password'} 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        style={inputStyle()}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        style={{
+                          position: 'absolute',
+                          left: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: textSecondary,
+                        }}
+                      >
+                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.confirmPassword}</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showConfirmPassword ? 'text' : 'password'} 
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        style={inputStyle()}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        style={{
+                          position: 'absolute',
+                          left: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: textSecondary,
+                        }}
+                      >
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <button style={{
-                padding: '12px 28px', background: '#3b82f6', color: 'white',
-                border: 'none', borderRadius: '10px', fontWeight: 600,
-                cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
-              }}>{t.change}</button>
+
+                <button type="submit" disabled={loading} style={{
+                  padding: '12px 28px',
+                  background: loading ? '#94a3b8' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif",
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                  {loading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
+                  {t.change}
+                </button>
+              </form>
             </div>
 
+            {/* ===== Delete Account ===== */}
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#dc2626', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Trash2 size={18} />
@@ -560,11 +877,27 @@ const CraftsmanProfilePage = () => {
               <p style={{ color: textSecondary, fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.6 }}>
                 {t.deleteWarning}
               </p>
-              <button style={{
-                padding: '12px 28px', background: '#dc2626', color: 'white',
-                border: 'none', borderRadius: '10px', fontWeight: 600,
-                cursor: 'pointer', fontFamily: "'Cairo', sans-serif",
-              }}>{t.delete}</button>
+              <button 
+                onClick={handleDeleteAccount}
+                disabled={loading}
+                style={{
+                  padding: '12px 28px',
+                  background: loading ? '#94a3b8' : '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif",
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                {t.delete}
+              </button>
             </div>
           </div>
         )}

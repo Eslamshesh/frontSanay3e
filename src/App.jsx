@@ -2,52 +2,45 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-
 import { ThemeProvider } from './context/ThemeContext';
-import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider } from './context/AuthContext';
-
+import { LanguageProvider } from './context/LanguageContext';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// ============================================================
-// Lazy Loading - تحميل الصفحات عند الحاجة فقط (تحسين الأداء)
-// ============================================================
-
-// صفحات عامة (متاحة للجميع)
-const HomePage = lazy(() => import('./pages/HomePage'));
-const AboutPage = lazy(() => import('./pages/AboutPage'));
-const RoleSelectionPage = lazy(() => import('./pages/RoleSelectionPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
-const CustomerSignupPage = lazy(() => import('./pages/CustomerSignupPage'));
-const CraftsmanSignupPage = lazy(() => import('./pages/CraftsmanSignupPage'));
-const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
-const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
-const TermsConditionsPage = lazy(() => import('./pages/TermsConditionsPage'));
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-
-// صفحات محمية (تحتاج تسجيل دخول)
-const CustomerHomePage = lazy(() => import('./pages/CustomerHomePage'));
-const CraftsmanHomePage = lazy(() => import('./pages/CraftsmanHomePage'));
-const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'));
-const RequestServicePage = lazy(() => import('./pages/RequestServicePage'));
-const BookingPage = lazy(() => import('./pages/BookingPage'));
-const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'));
-const CraftsmanProfilePage = lazy(() => import('./pages/CraftsmanProfilePage'));
-const CustomerProfilePage = lazy(() => import('./pages/CustomerProfilePage'));
-const NotificationsViewPage = lazy(() => import('./pages/NotificationsViewPage'));
-const CraftsmanDetailPage = lazy(() => import('./pages/CraftsmanDetailPage'));
-const ReviewsListPage = lazy(() => import('./pages/ReviewsListPage'));
+// ===== Import عادي (بدل lazy) =====
+import HomePage from './pages/HomePage';
+import AboutPage from './pages/AboutPage';
+import RoleSelectionPage from './pages/RoleSelectionPage';
+import LoginPage from './pages/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import CustomerSignupPage from './pages/CustomerSignupPage';
+import CraftsmanSignupPage from './pages/CraftsmanSignupPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import HelpSupportPage from './pages/HelpSupportPage';
+import TermsConditionsPage from './pages/TermsConditionsPage';
+import NotFoundPage from './pages/NotFoundPage';
+import SearchResultsPage from './pages/SearchResultsPage';
+import RequestServicePage from './pages/RequestServicePage';
+import BookingPage from './pages/BookingPage';
+import CraftsmanProfilePage from './pages/CraftsmanProfilePage';
+import CustomerProfilePage from './pages/CustomerProfilePage';
+import CraftsmanDetailPage from './pages/CraftsmanDetailPage';
+import ReviewsListPage from './pages/ReviewsListPage';
+import SubscriptionPage from './pages/SubscriptionPage';
+import CustomerHomePage from './pages/CustomerHomePage';
+import CraftsmanHomePage from './pages/CraftsmanHomePage';
+import MyBookingsPage from './pages/MyBookingsPage';
+import NotificationsViewPage from './pages/NotificationsViewPage';
+import ServicePostDetailPage from './pages/ServicePostDetailPage';
 
 // ============================================================
-// ProfileRouter - يوجه للملف الشخصي حسب الدور
+// ProfileRouter
 // ============================================================
 
 const ProfileRouter = () => {
   const { user, loading } = useAuth();
 
-  // أثناء التحميل
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" dir="rtl">
@@ -61,31 +54,18 @@ const ProfileRouter = () => {
     );
   }
 
-  // إذا لم يكن هناك مستخدم
-  if (!user) {
-    return null;
+  if (!user) return null;
+
+  if (user?.role === 'craftsman') {
+    return <CraftsmanProfilePage />;
   }
-
-  // توجيه حسب الدور
-  return user?.role === 'craftsman' 
-    ? <CraftsmanProfilePage /> 
-    : <CustomerProfilePage />;
+  
+  if (user?.role === 'client' || user?.role === 'customer') {
+    return <CustomerProfilePage />;
+  }
+  
+  return <CustomerProfilePage />;
 };
-
-// ============================================================
-// Spinner Component - يستخدم أثناء تحميل الصفحات
-// ============================================================
-
-const PageLoader = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900" dir="rtl">
-    <div className="flex flex-col items-center gap-4">
-      <div className="w-16 h-16 border-4 border-gray-200 dark:border-gray-700 border-t-primary rounded-full animate-spin"></div>
-      <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">
-        جاري التحميل...
-      </p>
-    </div>
-  </div>
-);
 
 // ============================================================
 // App Component
@@ -97,11 +77,9 @@ function App() {
       <LanguageProvider>
         <AuthProvider>
           <Layout>
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<div>جاري التحميل...</div>}>
               <Routes>
-                {/* ==========================================
-                    📄 صفحات عامة - متاحة للجميع
-                    ========================================== */}
+                {/* ===== صفحات عامة ===== */}
                 <Route path="/" element={<HomePage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/select-role" element={<RoleSelectionPage />} />
@@ -113,9 +91,7 @@ function App() {
                 <Route path="/help" element={<HelpSupportPage />} />
                 <Route path="/terms" element={<TermsConditionsPage />} />
 
-                {/* ==========================================
-                    🔒 صفحات محمية - تحتاج تسجيل دخول (أي دور)
-                    ========================================== */}
+                {/* ===== صفحات محمية ===== */}
                 <Route path="/search" element={
                   <ProtectedRoute>
                     <SearchResultsPage />
@@ -146,19 +122,25 @@ function App() {
                     <NotificationsViewPage />
                   </ProtectedRoute>
                 } />
-
-                {/* ==========================================
-                    🔒 صفحات محمية - دور العميل فقط
-                    ========================================== */}
-                <Route path="/customer/home" element={
-                  <ProtectedRoute requiredRole="customer">
-                    <CustomerHomePage />
+                <Route path="/service-post/:id" element={
+                  <ProtectedRoute>
+                    <ServicePostDetailPage />
                   </ProtectedRoute>
                 } />
 
-                {/* ==========================================
-                    🔒 صفحات محمية - دور الحرفي فقط
-                    ========================================== */}
+                {/* ===== صفحات العميل ===== */}
+                <Route path="/customer/home" element={
+                  <ProtectedRoute requiredRole="client">
+                    <CustomerHomePage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/my-bookings" element={
+                  <ProtectedRoute requiredRole="client">
+                    <MyBookingsPage />
+                  </ProtectedRoute>
+                } />
+
+                {/* ===== صفحات الحرفي ===== */}
                 <Route path="/craftsman/home" element={
                   <ProtectedRoute requiredRole="craftsman">
                     <CraftsmanHomePage />
@@ -170,18 +152,14 @@ function App() {
                   </ProtectedRoute>
                 } />
 
-                {/* ==========================================
-                    👤 الملف الشخصي - يظهر حسب الدور تلقائياً
-                    ========================================== */}
+                {/* ===== الملف الشخصي ===== */}
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <ProfileRouter />
                   </ProtectedRoute>
                 } />
 
-                {/* ==========================================
-                    🚫 404 - صفحة غير موجودة
-                    ========================================== */}
+                {/* ===== 404 ===== */}
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>

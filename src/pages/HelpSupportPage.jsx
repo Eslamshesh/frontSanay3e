@@ -1,24 +1,40 @@
+// src/pages/HelpSupportPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext'; // ✅ إضافة
+import api from '../services/api'; // ✅ إضافة
 import { 
   HelpCircle, Mail, Phone, Clock, MessageSquare, 
   ChevronDown, Send, CheckCircle, MapPin, 
   Smartphone, Globe, Shield, Star, Users,
   Search, BookOpen, Video, FileText, HeadphonesIcon,
-  AlertCircle, ThumbsUp
+  AlertCircle, ThumbsUp, Loader, X
 } from 'lucide-react';
 
 const HelpSupportPage = () => {
   const { darkMode } = useTheme();
+  const { user, isAuthenticated } = useAuth(); // ✅ إضافة
   const [lang, setLang] = useState('ar');
   const [openId, setOpenId] = useState(null);
   const [sent, setSent] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('faq');
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [hoveredCard, setHoveredCard] = useState(null);
+  const [faqs, setFaqs] = useState([]); // ✅ من الـ API
+  const [loadingFaqs, setLoadingFaqs] = useState(true); // ✅ حالة تحميل
 
-  // Language initialization
+  const [form, setForm] = useState({ 
+    name: '', 
+    email: '', 
+    subject: '', 
+    message: '' 
+  });
+
+  // ============================================================
+  // 🌍 Language
+  // ============================================================
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
@@ -32,7 +48,91 @@ const HelpSupportPage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // Translations
+  // ============================================================
+  // ✅ جلب الأسئلة الشائعة من الـ Backend
+  // ============================================================
+  useEffect(() => {
+    const loadFaqs = async () => {
+      setLoadingFaqs(true);
+      try {
+        const data = await api.getFaqs();
+        setFaqs(data.faqs || []);
+      } catch (error) {
+        console.warn('⚠️ Using fallback FAQs:', error);
+        // ✅ Fallback FAQs
+        const fallbackFaqs = lang === 'ar' ? [
+          { id: 1, question: 'كيف يعمل تطبيق اطلب صنايعي؟', answer: 'يمكنك البحث عن حرفي أو إرسال طلب خدمة، وسنقوم بربطك بالمختص المناسب بناءً على موقعك وتقييمات الحرفيين. كل ما عليك هو اختيار التخصص المناسب وتحديد موعد الخدمة.' },
+          { id: 2, question: 'كيف أقوم بحجز خدمة جديدة؟', answer: 'يمكنك إرسال طلب خدمة من الصفحة الرئيسية، أو البحث عن حرفي والضغط على زر "احجز الآن" في ملفه الشخصي. ستتلقى تأكيداً فورياً بالحجز.' },
+          { id: 3, question: 'هل يمكنني تقييم الحرفي؟', answer: 'نعم، بعد اكتمال الخدمة يمكنك تقييم الحرفي وكتابة مراجعة عن تجربتك. تقييمك يساعد العملاء الآخرين في اختيار الحرفي المناسب.' },
+          { id: 4, question: 'ما هي طرق الدفع المتاحة؟', answer: 'نوفر طرق دفع متعددة: الدفع نقداً، InstaPay، Vodafone Cash، Etisalat Cash، Orange Cash، وبطاقات الائتمان.' },
+          { id: 5, question: 'كيف أتأكد من أن الحرفي موثوق؟', answer: 'جميع الحرفيين يمرون بعملية تحقق صارمة من الهوية والمهارات. يمكنك الاطلاع على التقييمات والمراجعات من العملاء السابقين.' },
+          { id: 6, question: 'هل يمكنني إلغاء الحجز؟', answer: 'نعم، يمكنك إلغاء الحجز قبل موعد الخدمة بـ 24 ساعة على الأقل دون أي رسوم.' },
+        ] : [
+          { id: 1, question: 'How does Atlob Sanay3y work?', answer: 'You can search for a craftsman or send a service request, and we will connect you with the right specialist based on your location and craftsman ratings. All you need to do is choose the appropriate specialty and schedule the service.' },
+          { id: 2, question: 'How do I book a new service?', answer: 'You can send a service request from the home page, or search for a craftsman and click "Book Now" on their profile. You will receive instant booking confirmation.' },
+          { id: 3, question: 'Can I rate the craftsman?', answer: 'Yes, after the service is completed, you can rate the craftsman and write a review about your experience. Your rating helps other customers choose the right craftsman.' },
+          { id: 4, question: 'What payment methods are available?', answer: 'We offer multiple payment methods: Cash, InstaPay, Vodafone Cash, Etisalat Cash, Orange Cash, and credit cards.' },
+          { id: 5, question: 'How do I verify that the craftsman is trustworthy?', answer: 'All craftsmen undergo a strict identity and skills verification process. You can view ratings and reviews from previous customers.' },
+          { id: 6, question: 'Can I cancel a booking?', answer: 'Yes, you can cancel your booking at least 24 hours before the service time without any fees.' },
+        ];
+        setFaqs(fallbackFaqs);
+      }
+      setLoadingFaqs(false);
+    };
+    loadFaqs();
+  }, [lang]);
+
+  // ============================================================
+  // ✅ دوال النموذج
+  // ============================================================
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+    if (submitError) setSubmitError('');
+  };
+
+  // ============================================================
+  // ✅ إرسال رسالة الدعم
+  // ============================================================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // ✅ التحقق من صحة البيانات
+    if (!form.name.trim() || !form.email.trim() || !form.subject.trim() || !form.message.trim()) {
+      setSubmitError(lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      // ✅ إرسال الرسالة إلى الـ Backend
+      await api.sendContactMessage({
+        name: form.name,
+        email: form.email,
+        subject: form.subject,
+        message: form.message,
+        user_id: user?.id || null,
+      });
+      
+      setSent(true);
+      setForm({ name: '', email: '', subject: '', message: '' });
+      
+      // ✅ إخفاء رسالة النجاح بعد 5 ثواني
+      setTimeout(() => setSent(false), 5000);
+      
+    } catch (error) {
+      console.error('❌ Error sending message:', error);
+      setSubmitError(error.message || (lang === 'ar' ? 'حدث خطأ في إرسال الرسالة' : 'Error sending message'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ============================================================
+  // 📝 Translations
+  // ============================================================
   const t = {
     title: lang === 'ar' ? 'مركز المساعدة والدعم' : 'Help & Support Center',
     subtitle: lang === 'ar' ? 'نحن هنا لمساعدتك! اعثر على إجابات لأسئلتك أو تواصل معنا مباشرة' : 'We are here to help! Find answers to your questions or contact us directly',
@@ -57,21 +157,12 @@ const HelpSupportPage = () => {
     send: lang === 'ar' ? 'إرسال الرسالة' : 'Send Message',
     successMessage: lang === 'ar' ? '✅ تم إرسال رسالتك بنجاح! سنتواصل معك قريباً.' : '✅ Your message has been sent successfully! We will contact you soon.',
     quickLinks: lang === 'ar' ? 'روابط سريعة' : 'Quick Links',
-    faqs: lang === 'ar' ? [
-      { id: 1, q: 'كيف يعمل تطبيق اطلب صنايعي؟', a: 'يمكنك البحث عن حرفي أو إرسال طلب خدمة، وسنقوم بربطك بالمختص المناسب بناءً على موقعك وتقييمات الحرفيين. كل ما عليك هو اختيار التخصص المناسب وتحديد موعد الخدمة.' },
-      { id: 2, q: 'كيف أقوم بحجز خدمة جديدة؟', a: 'يمكنك إرسال طلب خدمة من الصفحة الرئيسية، أو البحث عن حرفي والضغط على زر "احجز الآن" في ملفه الشخصي. ستتلقى تأكيداً فورياً بالحجز.' },
-      { id: 3, q: 'هل يمكنني تقييم الحرفي؟', a: 'نعم، بعد اكتمال الخدمة يمكنك تقييم الحرفي وكتابة مراجعة عن تجربتك. تقييمك يساعد العملاء الآخرين في اختيار الحرفي المناسب.' },
-      { id: 4, q: 'ما هي طرق الدفع المتاحة؟', a: 'نوفر طرق دفع متعددة: الدفع نقداً، InstaPay، Vodafone Cash، Etisalat Cash، Orange Cash، وبطاقات الائتمان.' },
-      { id: 5, q: 'كيف أتأكد من أن الحرفي موثوق؟', a: 'جميع الحرفيين يمرون بعملية تحقق صارمة من الهوية والمهارات. يمكنك الاطلاع على التقييمات والمراجعات من العملاء السابقين.' },
-      { id: 6, q: 'هل يمكنني إلغاء الحجز؟', a: 'نعم، يمكنك إلغاء الحجز قبل موعد الخدمة بـ 24 ساعة على الأقل دون أي رسوم.' },
-    ] : [
-      { id: 1, q: 'How does Atlob Sanay3y work?', a: 'You can search for a craftsman or send a service request, and we will connect you with the right specialist based on your location and craftsman ratings. All you need to do is choose the appropriate specialty and schedule the service.' },
-      { id: 2, q: 'How do I book a new service?', a: 'You can send a service request from the home page, or search for a craftsman and click "Book Now" on their profile. You will receive instant booking confirmation.' },
-      { id: 3, q: 'Can I rate the craftsman?', a: 'Yes, after the service is completed, you can rate the craftsman and write a review about your experience. Your rating helps other customers choose the right craftsman.' },
-      { id: 4, q: 'What payment methods are available?', a: 'We offer multiple payment methods: Cash, InstaPay, Vodafone Cash, Etisalat Cash, Orange Cash, and credit cards.' },
-      { id: 5, q: 'How do I verify that the craftsman is trustworthy?', a: 'All craftsmen undergo a strict identity and skills verification process. You can view ratings and reviews from previous customers.' },
-      { id: 6, q: 'Can I cancel a booking?', a: 'Yes, you can cancel your booking at least 24 hours before the service time without any fees.' },
-    ],
+    loading: lang === 'ar' ? 'جاري التحميل...' : 'Loading...',
+    error: lang === 'ar' ? 'حدث خطأ' : 'Error',
+    retry: lang === 'ar' ? 'إعادة المحاولة' : 'Retry',
+    fillAllFields: lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields',
+    sending: lang === 'ar' ? 'جاري الإرسال...' : 'Sending...',
+    noFaqs: lang === 'ar' ? 'لا توجد أسئلة شائعة' : 'No FAQs found',
     guides: lang === 'ar' ? [
       { icon: <BookOpen size={24} />, title: 'دليل المستخدم', desc: 'تعلم كيفية استخدام المنصة خطوة بخطوة' },
       { icon: <Video size={24} />, title: 'فيديوهات تعليمية', desc: 'شاهد فيديوهات توضيحية لاستخدام المنصة' },
@@ -83,25 +174,17 @@ const HelpSupportPage = () => {
     ],
   };
 
-  const faqs = t.faqs;
-
+  // ============================================================
+  // 🔍 فلترة الأسئلة
+  // ============================================================
   const filteredFaqs = faqs.filter(faq => 
-    faq.q.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    faq.a.toLowerCase().includes(searchQuery.toLowerCase())
+    faq.question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    faq.answer?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleChange = (e) => {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setSent(true);
-    setForm({ name: '', email: '', subject: '', message: '' });
-    setTimeout(() => setSent(false), 5000);
-  };
-
-  // Dynamic colors
+  // ============================================================
+  // 🎨 Dynamic Colors
+  // ============================================================
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
   const cardBg = darkMode ? '#1e293b' : '#ffffff';
   const textColor = darkMode ? '#f1f5f9' : '#0f172a';
@@ -112,6 +195,9 @@ const HelpSupportPage = () => {
     ? 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)'
     : 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)';
 
+  // ============================================================
+  // 🎨 Render
+  // ============================================================
   return (
     <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif" }}>
       <style>{`
@@ -140,9 +226,9 @@ const HelpSupportPage = () => {
           50% { transform: translateY(-10px); }
         }
         
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         
         .animate-fade-in-up {
@@ -159,6 +245,10 @@ const HelpSupportPage = () => {
         
         .animate-float {
           animation: float 3s ease-in-out infinite;
+        }
+        
+        .animate-spin {
+          animation: spin 1s linear infinite;
         }
         
         .delay-100 { animation-delay: 0.1s; }
@@ -180,6 +270,10 @@ const HelpSupportPage = () => {
           animation: slideDown 0.4s ease forwards;
         }
         
+        .suggestion-hover:hover {
+          transform: translateX(-4px);
+        }
+        
         @media (max-width: 768px) {
           .hero-title {
             font-size: 2rem !important;
@@ -188,10 +282,13 @@ const HelpSupportPage = () => {
             font-size: 0.875rem !important;
             padding: 10px 16px !important;
           }
+          .contact-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
       `}</style>
 
-      {/* Hero Section */}
+      {/* ===== Hero Section ===== */}
       <div style={{
         background: gradientBg,
         color: 'white',
@@ -275,14 +372,14 @@ const HelpSupportPage = () => {
         }} />
       </div>
 
-      {/* Main Content */}
+      {/* ===== Main Content ===== */}
       <div style={{
         maxWidth: '900px',
         margin: '0 auto',
         padding: '40px 24px',
       }}>
         
-        {/* Search Bar */}
+        {/* ===== Search Bar ===== */}
         <div className="animate-fade-in-up delay-100" style={{
           marginBottom: '40px',
           position: 'relative',
@@ -331,13 +428,13 @@ const HelpSupportPage = () => {
                   fontSize: '1.2rem',
                 }}
               >
-                ✕
+                <X size={18} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* ===== Tabs ===== */}
         <div className="animate-fade-in-up delay-200" style={{
           display: 'flex',
           gap: '8px',
@@ -352,6 +449,7 @@ const HelpSupportPage = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
+              className="tab-button"
               style={{
                 flex: 1,
                 padding: '12px 20px',
@@ -376,13 +474,22 @@ const HelpSupportPage = () => {
           ))}
         </div>
 
-        {/* FAQ Tab */}
+        {/* ===== FAQ Tab ===== */}
         {activeTab === 'faq' && (
           <div>
-            {filteredFaqs.length > 0 ? (
+            {loadingFaqs ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '60px 20px',
+                color: textSecondary,
+              }}>
+                <Loader size={40} className="animate-spin" style={{ marginBottom: '16px', color: '#3b82f6' }} />
+                <p>{t.loading}</p>
+              </div>
+            ) : filteredFaqs.length > 0 ? (
               filteredFaqs.map((faq, index) => (
                 <div 
-                  key={faq.id}
+                  key={faq.id || index}
                   className={`animate-fade-in-up delay-${(index + 1) * 100}`}
                   style={{
                     background: cardBg,
@@ -412,7 +519,7 @@ const HelpSupportPage = () => {
                       textAlign: lang === 'ar' ? 'right' : 'left',
                     }}
                   >
-                    <span style={{ flex: 1 }}>{faq.q}</span>
+                    <span style={{ flex: 1 }}>{faq.question}</span>
                     <ChevronDown 
                       size={20} 
                       style={{
@@ -441,7 +548,7 @@ const HelpSupportPage = () => {
                         background: borderColor,
                         marginBottom: '16px',
                       }} />
-                      {faq.a}
+                      {faq.answer}
                     </div>
                   )}
                 </div>
@@ -454,20 +561,24 @@ const HelpSupportPage = () => {
               }}>
                 <AlertCircle size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
                 <p style={{ fontSize: '1.1rem' }}>
-                  {lang === 'ar' ? 'لا توجد نتائج مطابقة لبحثك' : 'No results match your search'}
+                  {searchQuery ? (
+                    lang === 'ar' ? 'لا توجد نتائج مطابقة لبحثك' : 'No results match your search'
+                  ) : (
+                    t.noFaqs
+                  )}
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Contact Tab */}
+        {/* ===== Contact Tab ===== */}
         {activeTab === 'contact' && (
           <div>
             {/* Contact Cards */}
-            <div style={{
+            <div className="contact-grid" style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '16px',
               marginBottom: '32px',
             }}>
@@ -561,6 +672,7 @@ const HelpSupportPage = () => {
                 </h2>
               </div>
 
+              {/* ✅ رسالة النجاح */}
               {sent && (
                 <div className="animate-fade-in" style={{
                   background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
@@ -579,6 +691,25 @@ const HelpSupportPage = () => {
                 </div>
               )}
 
+              {/* ✅ رسالة الخطأ */}
+              {submitError && (
+                <div className="animate-fade-in" style={{
+                  background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+                  color: '#dc2626',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  fontSize: '0.9rem',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  border: '1px solid rgba(220,38,38,0.2)',
+                }}>
+                  <AlertCircle size={18} />
+                  {submitError}
+                </div>
+              )}
+
               <form onSubmit={handleSubmit}>
                 <div style={{
                   display: 'grid',
@@ -594,7 +725,7 @@ const HelpSupportPage = () => {
                       color: textColor,
                       marginBottom: '8px',
                     }}>
-                      {t.name}
+                      {t.name} <span style={{ color: '#dc2626' }}>*</span>
                     </label>
                     <input 
                       type="text" 
@@ -627,7 +758,7 @@ const HelpSupportPage = () => {
                       color: textColor,
                       marginBottom: '8px',
                     }}>
-                      {t.emailLabel}
+                      {t.emailLabel} <span style={{ color: '#dc2626' }}>*</span>
                     </label>
                     <input 
                       type="email" 
@@ -662,13 +793,14 @@ const HelpSupportPage = () => {
                     color: textColor,
                     marginBottom: '8px',
                   }}>
-                    {t.subject}
+                    {t.subject} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <input 
                     type="text" 
                     name="subject" 
                     value={form.subject} 
                     onChange={handleChange}
+                    required
                     placeholder={lang === 'ar' ? 'موضوع رسالتك' : 'Message subject'}
                     style={{
                       width: '100%',
@@ -695,7 +827,7 @@ const HelpSupportPage = () => {
                     color: textColor,
                     marginBottom: '8px',
                   }}>
-                    {t.message}
+                    {t.message} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <textarea 
                     name="message" 
@@ -725,40 +857,55 @@ const HelpSupportPage = () => {
                 
                 <button 
                   type="submit"
+                  disabled={isSubmitting}
                   style={{
                     padding: '14px 36px',
-                    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                    background: isSubmitting ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '12px',
                     fontWeight: 700,
                     fontSize: '1rem',
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     transition: 'all 0.3s ease',
                     fontFamily: "'Cairo', sans-serif",
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+                    boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
+                    opacity: isSubmitting ? 0.7 : 1,
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.transform = 'translateY(-2px)';
-                    e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)';
+                    if (!isSubmitting) {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 6px 20px rgba(59,130,246,0.4)';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 4px 16px rgba(59,130,246,0.3)';
+                    if (!isSubmitting) {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 4px 16px rgba(59,130,246,0.3)';
+                    }
                   }}
                 >
-                  <Send size={18} />
-                  {t.send}
+                  {isSubmitting ? (
+                    <>
+                      <Loader size={18} className="animate-spin" />
+                      {t.sending}
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} />
+                      {t.send}
+                    </>
+                  )}
                 </button>
               </form>
             </div>
           </div>
         )}
 
-        {/* Guides Tab */}
+        {/* ===== Guides Tab ===== */}
         {activeTab === 'guides' && (
           <div style={{
             display: 'grid',
@@ -777,6 +924,12 @@ const HelpSupportPage = () => {
                   textAlign: 'center',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = borderColor;
                 }}
               >
                 <div style={{

@@ -29,7 +29,6 @@ const VerifyEmailPage = () => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
     
-    // Get email from user context or localStorage
     const email = user?.email || localStorage.getItem('pendingVerificationEmail') || 'example@email.com';
     setUserEmail(email);
     
@@ -81,16 +80,27 @@ const VerifyEmailPage = () => {
     networkError: lang === 'ar' ? 'لا يوجد اتصال بالخادم. تأكد من اتصالك بالإنترنت.' : 'No server connection. Please check your internet.',
   };
 
-  // ✅ التحقق من OTP باستخدام api.verifyEmail
+  // ✅ التحقق من OTP باستخدام api.verifyOtp (بدلاً من api.verifyEmail)
   const handleVerify = async (enteredCode) => {
     setIsVerifying(true);
     setError('');
 
     try {
-      await api.verifyEmail(enteredCode);
+      // ✅ استخدام verifyOtp بدلاً من verifyEmail
+      const data = await api.verifyOtp(userEmail, enteredCode, 'register');
       
       // ✅ نجاح التحقق
       setSuccess(true);
+      
+      // ✅ حفظ verified_token لو موجود
+      if (data.verified_token) {
+        localStorage.setItem('verified_token', data.verified_token);
+      }
+      
+      // ✅ تحديث حالة المستخدم في localStorage
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      userData.email_verified_at = new Date().toISOString();
+      localStorage.setItem('user', JSON.stringify(userData));
       
       setTimeout(() => {
         const userRole = localStorage.getItem('userRole') || 'customer';
@@ -125,12 +135,10 @@ const VerifyEmailPage = () => {
     setCode(newCode);
     setError('');
 
-    // Auto-focus next input
     if (value && index < 5) {
       codeInputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-verify when all digits are entered
     if (newCode.every(d => d !== '')) {
       const enteredCode = newCode.join('');
       handleVerify(enteredCode);
@@ -154,7 +162,6 @@ const VerifyEmailPage = () => {
     }
     setCode(newCode);
 
-    // Auto-verify if pasted code is complete
     if (pastedData.length === 6) {
       handleVerify(pastedData);
     } else {
@@ -173,7 +180,7 @@ const VerifyEmailPage = () => {
     handleVerify(enteredCode);
   };
 
-  // ✅ إعادة إرسال كود التحقق باستخدام api.resendVerification
+  // ✅ إعادة إرسال كود التحقق باستخدام api.sendOtp (بدلاً من api.resendVerification)
   const handleResend = async () => {
     if (countdown > 0) return;
     
@@ -182,7 +189,8 @@ const VerifyEmailPage = () => {
     setSuccess(false);
 
     try {
-      await api.resendVerification();
+      // ✅ استخدام sendOtp بدلاً من resendVerification
+      await api.sendOtp(userEmail);
       setSuccess(t.codeSent);
       setCountdown(60);
       setTimeout(() => setSuccess(false), 3000);
@@ -418,7 +426,6 @@ const VerifyEmailPage = () => {
           }}>
             <Mail size={36} color="white" />
             
-            {/* Shield Badge */}
             <div className="animate-float" style={{
               position: 'absolute',
               bottom: '-6px',

@@ -8,23 +8,24 @@ import {
   MapPin, Navigation, User, Mail, Phone, MessageCircle,
   Lock, Eye, EyeOff, Wrench, Shield, Camera, ChevronDown,
   CheckCircle, AlertCircle, ArrowLeft, Star, Sparkles,
-  Briefcase, Building, Home, Loader
+  Briefcase, Building, Home, Loader, Upload, X, Image
 } from 'lucide-react';
 
-const professionsList = [
-  { name: 'سباك', icon: '🔧' },
-  { name: 'كهربائي', icon: '⚡' },
-  { name: 'نجار', icon: '🪚' },
-  { name: 'نقاش', icon: '🎨' },
-  { name: 'فني تكييف', icon: '❄️' },
-  { name: 'بناء', icon: '🏗️' },
-  { name: 'حداد', icon: '🔩' },
-  { name: 'مبلط', icon: '🧱' },
-  { name: 'فني ستلايت', icon: '📡' },
-  { name: 'ميكانيكي', icon: '🔧' },
-  { name: 'عامل نظافة', icon: '🧹' },
-  { name: 'مكافحة حشرات', icon: '🐛' },
-  { name: 'أخرى', icon: '➕' },
+// ✅ قائمة المهن الاحتياطية (Fallback) في حالة فشل جلبها من الباك إند
+const fallbackProfessionsList = [
+  { id: 1, name: 'سباك', icon: '🔧' },
+  { id: 2, name: 'كهربائي', icon: '⚡' },
+  { id: 3, name: 'نجار', icon: '🪚' },
+  { id: 4, name: 'نقاش', icon: '🎨' },
+  { id: 5, name: 'فني تكييف', icon: '❄️' },
+  { id: 6, name: 'بناء', icon: '🏗️' },
+  { id: 7, name: 'حداد', icon: '🔩' },
+  { id: 8, name: 'مبلط', icon: '🧱' },
+  { id: 9, name: 'فني ستلايت', icon: '📡' },
+  { id: 10, name: 'ميكانيكي', icon: '🔧' },
+  { id: 11, name: 'عامل نظافة', icon: '🧹' },
+  { id: 12, name: 'مكافحة حشرات', icon: '🐛' },
+  { id: 13, name: 'أخرى', icon: '➕' },
 ];
 
 const egyptianCities = [
@@ -47,7 +48,10 @@ const CraftsmanSignupPage = () => {
   const [isLocating, setIsLocating] = useState(false);
   const [locationMethod, setLocationMethod] = useState('manual');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const fileInputRef = useRef(null);
+  const [loadingCrafts, setLoadingCrafts] = useState(true);
+  const [professionsList, setProfessionsList] = useState(fallbackProfessionsList);
+  const fileInputRefFront = useRef(null);
+  const fileInputRefBack = useRef(null);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -63,14 +67,47 @@ const CraftsmanSignupPage = () => {
     confirmPassword: '',
     latitude: null,
     longitude: null,
-    idImage: null,
-    idImagePreview: null,
+    nationalIdFront: null,
+    nationalIdFrontPreview: null,
+    nationalIdBack: null,
+    nationalIdBackPreview: null,
+    craftIds: [],
   });
 
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [locationMessage, setLocationMessage] = useState('');
+  const [registrationSuccess, setRegistrationSuccess] = useState('');
   const [errors, setErrors] = useState({});
+
+  // ✅ جلب المهن من الباك إند عند تحميل الصفحة
+  useEffect(() => {
+    const fetchCrafts = async () => {
+      setLoadingCrafts(true);
+      try {
+        const data = await api.getCrafts();
+        if (data.crafts && data.crafts.length > 0) {
+          const craftsFromBackend = data.crafts.map(c => ({
+            id: c.id,
+            name: c.name,
+            icon: '🔧',
+          }));
+          setProfessionsList(craftsFromBackend);
+          console.log('✅ [CraftsmanSignup] Crafts loaded from backend:', craftsFromBackend.length);
+        } else {
+          console.warn('⚠️ [CraftsmanSignup] No crafts from backend, using fallback list');
+          setProfessionsList(fallbackProfessionsList);
+        }
+      } catch (error) {
+        console.warn('⚠️ [CraftsmanSignup] Failed to fetch crafts, using fallback list:', error.message);
+        setProfessionsList(fallbackProfessionsList);
+      } finally {
+        setLoadingCrafts(false);
+      }
+    };
+
+    fetchCrafts();
+  }, []);
 
   // Language initialization
   useEffect(() => {
@@ -98,24 +135,25 @@ const CraftsmanSignupPage = () => {
     lastName: lang === 'ar' ? 'الاسم الأخير' : 'Last Name',
     email: lang === 'ar' ? 'البريد الإلكتروني' : 'Email Address',
     phone: lang === 'ar' ? 'رقم الهاتف' : 'Phone Number',
-    whatsapp: lang === 'ar' ? 'واتساب' : 'WhatsApp',
+    whatsapp: lang === 'ar' ? 'واتساب (اختياري)' : 'WhatsApp (Optional)',
     city: lang === 'ar' ? 'المدينة' : 'City',
     district: lang === 'ar' ? 'الحي / المنطقة' : 'District / Area',
     selectCity: lang === 'ar' ? 'اختر المدينة' : 'Select City',
     profession: lang === 'ar' ? 'اختر مهنتك' : 'Select Your Profession',
     customProfession: lang === 'ar' ? 'اكتب مهنتك الجديدة' : 'Write your new profession',
-    customProfessionNote: lang === 'ar' ? 'المهنة الجديدة ستظهر بعد موافقة المشرف' : 'New profession will appear after admin approval',
+    customProfessionNote: lang === 'ar' ? '⚠️ المهنة الجديدة ستظهر بعد موافقة المشرف' : '⚠️ New profession will appear after admin approval',
     password: lang === 'ar' ? 'كلمة المرور' : 'Password',
     confirmPassword: lang === 'ar' ? 'تأكيد كلمة المرور' : 'Confirm Password',
-    uploadID: lang === 'ar' ? 'رفع صورة الهوية' : 'Upload ID Photo',
+    uploadIDFront: lang === 'ar' ? 'رفع صورة الهوية (الوجه الأمامي)' : 'Upload ID Photo (Front)',
+    uploadIDBack: lang === 'ar' ? 'رفع صورة الهوية (الوجه الخلفي)' : 'Upload ID Photo (Back)',
     uploadText: lang === 'ar' ? 'اسحب وأفلت الصورة هنا أو اضغط للاختيار' : 'Drag & drop image here or click to select',
     uploadHint: lang === 'ar' ? 'JPG, PNG - الحد الأقصى 5MB' : 'JPG, PNG - Max 5MB',
     detectLocation: lang === 'ar' ? 'تحديد موقعي تلقائياً' : 'Detect My Location Automatically',
     manualLocation: lang === 'ar' ? 'إدخال الموقع يدوياً' : 'Enter Location Manually',
     locating: lang === 'ar' ? 'جاري تحديد الموقع...' : 'Locating...',
-    locationDetected: lang === 'ar' ? 'تم تحديد موقعك بنجاح!' : 'Location detected successfully!',
+    locationDetected: lang === 'ar' ? '📍 تم تحديد موقعك بنجاح!' : '📍 Location detected successfully!',
     locationError: lang === 'ar' ? 'تعذر تحديد الموقع. الرجاء المحاولة مرة أخرى أو إدخال الموقع يدوياً.' : 'Unable to detect location. Please try again or enter manually.',
-    submit: lang === 'ar' ? 'إنشاء الحساب' : 'Create Account',
+    submit: lang === 'ar' ? 'إرسال الطلب' : 'Submit Request',
     haveAccount: lang === 'ar' ? 'لديك حساب بالفعل؟' : 'Already have an account?',
     login: lang === 'ar' ? 'تسجيل الدخول' : 'Login',
     next: lang === 'ar' ? 'التالي' : 'Next',
@@ -124,32 +162,61 @@ const CraftsmanSignupPage = () => {
     steps: lang === 'ar' ? ['المعلومات الشخصية', 'الموقع والمهنة', 'تأكيد الحساب'] : ['Personal Info', 'Location & Profession', 'Account Security'],
     creating: lang === 'ar' ? 'جاري إنشاء الحساب...' : 'Creating account...',
     submitting: lang === 'ar' ? 'جاري الإرسال...' : 'Submitting...',
-    // ✅ إضافة ترجمة لرسالة التوجيه
     redirecting: lang === 'ar' ? 'جاري التوجيه...' : 'Redirecting...',
+    pendingApproval: lang === 'ar' ? '✅ تم إرسال طلبك بنجاح! سيتم مراجعته من قبل المشرف.' : '✅ Your request has been sent successfully! It will be reviewed by the admin.',
+    chooseProfession: lang === 'ar' ? 'اختر مهنتك' : 'Choose your profession',
+    craftIdRequired: lang === 'ar' ? 'يرجى اختيار مهنة واحدة على الأقل' : 'Please select at least one profession',
+    loadingCrafts: lang === 'ar' ? 'جاري تحميل المهن...' : 'Loading professions...',
+    remove: lang === 'ar' ? 'إزالة' : 'Remove',
+    uploaded: lang === 'ar' ? 'تم رفع الصورة' : 'Image Uploaded',
+    dragDrop: lang === 'ar' ? 'اسحب وأفلت الصورة هنا' : 'Drag & drop image here',
+    orClick: lang === 'ar' ? 'أو اضغط للاختيار' : 'or click to select',
+    fillRequired: lang === 'ar' ? 'يرجى تعبئة جميع الحقول المطلوبة' : 'Please fill in all required fields',
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     if (name === 'profession') {
-      if (value === 'أخرى') {
+      const otherOption = professionsList.find(p => p.name === 'أخرى');
+      if (value === 'أخرى' || (otherOption && value === otherOption.name)) {
         setShowCustomInput(true);
-        setFormData(prev => ({ ...prev, profession: '', customProfession: '' }));
+        setFormData(prev => ({ 
+          ...prev, 
+          profession: value, 
+          customProfession: '', 
+          craftIds: [] 
+        }));
       } else {
         setShowCustomInput(false);
-        setFormData(prev => ({ ...prev, profession: value }));
+        const selectedCraft = professionsList.find(p => p.name === value);
+        if (selectedCraft) {
+          setFormData(prev => ({ 
+            ...prev, 
+            profession: value,
+            craftIds: [selectedCraft.id]
+          }));
+          console.log('✅ Selected craft:', selectedCraft.name, 'ID:', selectedCraft.id);
+        } else {
+          setFormData(prev => ({ 
+            ...prev, 
+            profession: value,
+            craftIds: []
+          }));
+          console.warn('⚠️ Craft not found for:', value);
+        }
       }
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
     
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleFileChange = (e) => {
+  // ✅ تحسين معالجة رفع الصور مع معاينة وإزالة
+  const handleFileChange = (e, type) => {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -157,18 +224,58 @@ const CraftsmanSignupPage = () => {
         return;
       }
       
+      if (!file.type.startsWith('image/')) {
+        setError(lang === 'ar' ? 'يرجى اختيار ملف صورة فقط' : 'Please select an image file');
+        return;
+      }
+      
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          idImage: file,
-          idImagePreview: reader.result,
-        }));
+        if (type === 'front') {
+          setFormData(prev => ({
+            ...prev,
+            nationalIdFront: file,
+            nationalIdFrontPreview: reader.result,
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            nationalIdBack: file,
+            nationalIdBackPreview: reader.result,
+          }));
+        }
+        setError('');
+        // ✅ مسح أي خطأ في الصور
+        setErrors(prev => ({ ...prev, nationalIdFront: '', nationalIdBack: '' }));
       };
       reader.readAsDataURL(file);
     }
   };
 
+  // ✅ إزالة الصورة
+  const removeImage = (type) => {
+    if (type === 'front') {
+      setFormData(prev => ({
+        ...prev,
+        nationalIdFront: null,
+        nationalIdFrontPreview: null,
+      }));
+      if (fileInputRefFront.current) {
+        fileInputRefFront.current.value = '';
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        nationalIdBack: null,
+        nationalIdBackPreview: null,
+      }));
+      if (fileInputRefBack.current) {
+        fileInputRefBack.current.value = '';
+      }
+    }
+  };
+
+  // ✅ دالة تحديد الموقع المعدلة
   const detectLocation = () => {
     if (!navigator.geolocation) {
       setError(lang === 'ar' ? 'متصفحك لا يدعم تحديد الموقع' : 'Your browser does not support geolocation');
@@ -177,6 +284,7 @@ const CraftsmanSignupPage = () => {
 
     setIsLocating(true);
     setError('');
+    setLocationMessage('');
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -187,8 +295,8 @@ const CraftsmanSignupPage = () => {
           longitude,
         }));
         setIsLocating(false);
-        setSuccess(t.locationDetected);
-        setTimeout(() => setSuccess(''), 3000);
+        setLocationMessage(t.locationDetected);
+        setTimeout(() => setLocationMessage(''), 4000);
       },
       (err) => {
         setIsLocating(false);
@@ -203,50 +311,96 @@ const CraftsmanSignupPage = () => {
     );
   };
 
+  // ✅ دالة validateStep المعدلة
   const validateStep = (stepNumber) => {
     const newErrors = {};
 
     if (stepNumber === 1) {
       if (!formData.firstName.trim()) newErrors.firstName = lang === 'ar' ? 'مطلوب' : 'Required';
       if (!formData.lastName.trim()) newErrors.lastName = lang === 'ar' ? 'مطلوب' : 'Required';
-      if (!formData.email.trim()) newErrors.email = lang === 'ar' ? 'مطلوب' : 'Required';
-      else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = lang === 'ar' ? 'بريد غير صالح' : 'Invalid email';
+      if (!formData.email.trim()) {
+        newErrors.email = lang === 'ar' ? 'مطلوب' : 'Required';
+      } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        newErrors.email = lang === 'ar' ? 'بريد غير صالح' : 'Invalid email';
+      }
+      if (!formData.phone.trim()) {
+        newErrors.phone = lang === 'ar' ? 'مطلوب' : 'Required';
+      }
     }
 
     if (stepNumber === 2) {
-      if (!formData.city) newErrors.city = lang === 'ar' ? 'اختر المدينة' : 'Select city';
-      if (!formData.profession && !showCustomInput) newErrors.profession = lang === 'ar' ? 'اختر المهنة' : 'Select profession';
-      if (showCustomInput && !formData.customProfession.trim()) newErrors.customProfession = lang === 'ar' ? 'مطلوب' : 'Required';
-      // ✅ إضافة التحقق من الصورة في validateStep
-      if (!formData.idImage) {
-        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية للمتابعة' : '⚠️ Please upload ID photo to continue');
-        return false;
+      // ✅ المدينة
+      if (!formData.city) {
+        newErrors.city = lang === 'ar' ? 'اختر المدينة' : 'Select city';
+      }
+      
+      // ✅ المهنة
+      if (!showCustomInput) {
+        if (!formData.profession) {
+          newErrors.profession = lang === 'ar' ? 'اختر المهنة' : 'Select profession';
+        } else if (formData.craftIds.length === 0) {
+          newErrors.profession = lang === 'ar' ? 'حدث خطأ في اختيار المهنة، حاول مرة أخرى' : 'Error selecting profession, try again';
+        }
+      } else {
+        if (!formData.customProfession.trim()) {
+          newErrors.customProfession = lang === 'ar' ? 'مطلوب' : 'Required';
+        }
+      }
+      
+      // ✅ التحقق من الصور
+      if (!formData.nationalIdFront) {
+        newErrors.nationalIdFront = lang === 'ar' ? 'مطلوب' : 'Required';
+      }
+      if (!formData.nationalIdBack) {
+        newErrors.nationalIdBack = lang === 'ar' ? 'مطلوب' : 'Required';
       }
     }
 
     if (stepNumber === 3) {
-      if (!formData.password) newErrors.password = lang === 'ar' ? 'مطلوب' : 'Required';
-      else if (formData.password.length < 6) newErrors.password = lang === 'ar' ? '6 أحرف على الأقل' : 'Min 6 characters';
-      if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = lang === 'ar' ? 'غير متطابق' : 'Not matching';
+      if (!formData.password) {
+        newErrors.password = lang === 'ar' ? 'مطلوب' : 'Required';
+      } else if (formData.password.length < 8) {
+        newErrors.password = lang === 'ar' ? '8 أحرف على الأقل' : 'Min 8 characters';
+      }
+      if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = lang === 'ar' ? 'غير متطابق' : 'Not matching';
+      }
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ handleNext المعدل - يتحقق من الصورة في الخطوة 2
+  // ✅ دالة handleNext المعدلة
   const handleNext = () => {
-    // ✅ التحقق من الصورة في الخطوة 2
+    setError(''); // ✅ مسح أي خطأ سابق
+    
+    // ✅ التحقق من الصور في الخطوة 2
     if (step === 2) {
-      if (!formData.idImage) {
-        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية للمتابعة' : '⚠️ Please upload ID photo to continue');
+      if (!formData.nationalIdFront) {
+        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية (الوجه الأمامي)' : '⚠️ Please upload ID photo (Front)');
+        return;
+      }
+      if (!formData.nationalIdBack) {
+        setError(lang === 'ar' ? '⚠️ يرجى رفع صورة الهوية (الوجه الخلفي)' : '⚠️ Please upload ID photo (Back)');
         return;
       }
     }
     
-    if (validateStep(step)) {
+    // ✅ التحقق من صحة البيانات
+    const isValid = validateStep(step);
+    
+    if (isValid) {
       setStep(prev => prev + 1);
       setError('');
+    } else {
+      // ✅ عرض جميع الأخطاء
+      const errorMessages = Object.values(errors).filter(Boolean);
+      if (errorMessages.length > 0) {
+        setError(errorMessages.join(' | '));
+      } else {
+        setError(t.fillRequired);
+      }
     }
   };
 
@@ -255,13 +409,21 @@ const CraftsmanSignupPage = () => {
     setError('');
   };
 
-  // ✅ تسجيل حرفي - باستخدام api.registerCraftsman
+  // ✅ دالة handleSubmit المعدلة
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
+    setRegistrationSuccess('');
 
-    if (!validateStep(3)) return;
+    if (!validateStep(3)) {
+      const errorMessages = Object.values(errors).filter(Boolean);
+      if (errorMessages.length > 0) {
+        setError(errorMessages.join(' | '));
+      } else {
+        setError(t.fillRequired);
+      }
+      return;
+    }
 
     const finalProfession = showCustomInput ? formData.customProfession : formData.profession;
 
@@ -270,39 +432,61 @@ const CraftsmanSignupPage = () => {
       return;
     }
 
-    // ✅ الصورة موجودة (تم التحقق منها في step 2)
-    if (!formData.idImage) {
-      setError(lang === 'ar' ? 'يرجى رفع صورة الهوية' : 'Please upload ID photo');
+    if (!formData.nationalIdFront) {
+      setError(lang === 'ar' ? 'يرجى رفع صورة الهوية (الوجه الأمامي)' : 'Please upload ID photo (Front)');
+      return;
+    }
+
+    if (!formData.nationalIdBack) {
+      setError(lang === 'ar' ? 'يرجى رفع صورة الهوية (الوجه الخلفي)' : 'Please upload ID photo (Back)');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // ✅ بناء FormData للباك
       const formDataToSend = new FormData();
       formDataToSend.append('first_name', formData.firstName);
       formDataToSend.append('last_name', formData.lastName);
       formDataToSend.append('email', formData.email);
       formDataToSend.append('phone', formData.phone);
       formDataToSend.append('city', formData.city);
-      formDataToSend.append('national_id_front', formData.idImage);
-      formDataToSend.append('national_id_back', formData.idImage); // مؤقتاً نفس الصورة
-      formDataToSend.append('craft_ids[]', 1); // مؤقتاً ID 1
+      formDataToSend.append('password', formData.password);
+      formDataToSend.append('password_confirmation', formData.confirmPassword);
+      formDataToSend.append('national_id_front', formData.nationalIdFront);
+      formDataToSend.append('national_id_back', formData.nationalIdBack);
+      
+      if (formData.craftIds.length > 0) {
+        formData.craftIds.forEach(id => {
+          formDataToSend.append('craft_ids[]', id);
+        });
+      } else if (!showCustomInput) {
+        const selectedCraft = professionsList.find(p => p.name === formData.profession);
+        if (selectedCraft) {
+          formDataToSend.append('craft_ids[]', selectedCraft.id);
+        }
+      }
+      
+      if (formData.district) formDataToSend.append('district', formData.district);
+      if (formData.latitude) formDataToSend.append('latitude', formData.latitude);
+      if (formData.longitude) formDataToSend.append('longitude', formData.longitude);
+      if (formData.whatsapp) formDataToSend.append('whatsapp', formData.whatsapp);
 
+      console.log('📤 [CraftsmanSignup] Sending data to backend');
       const data = await api.registerCraftsman(formDataToSend);
 
-      setSuccess(data.message || 'تم إرسال الطلب بنجاح');
-      
-      // ✅ حفظ الإيميل للتأكيد
+      console.log('✅ [CraftsmanSignup] Registration successful:', data);
+
+      setRegistrationSuccess(t.pendingApproval);
       localStorage.setItem('pendingVerificationEmail', formData.email);
       
-      // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
       setTimeout(() => {
-        navigate('/verify-email');
-      }, 2000);
+        navigate('/login');
+      }, 3000);
 
     } catch (err) {
+      console.error('❌ [CraftsmanSignup] Registration error:', err);
+      
       if (err.errors) {
         const errorMessages = Object.values(err.errors).flat().join(' | ');
         setError(errorMessages);
@@ -338,6 +522,213 @@ const CraftsmanSignupPage = () => {
     transition: 'all 0.3s ease',
     textAlign: 'right',
   });
+
+  // ✅ مكون رفع الصورة المحسن
+  const ImageUploadZone = ({ type, preview, onFileChange, onRemove, label, fieldError }) => {
+    const [dragActive, setDragActive] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const handleDrag = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
+      else if (e.type === 'dragleave') setDragActive(false);
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
+      if (e.dataTransfer.files?.[0]) {
+        const fakeEvent = { target: { files: e.dataTransfer.files } };
+        onFileChange(fakeEvent);
+      }
+    };
+
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
+          {label} <span style={{ color: '#dc2626' }}>*</span>
+          {fieldError && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginRight: '8px' }}>
+              ({fieldError})
+            </span>
+          )}
+        </label>
+        <div
+          onDragEnter={handleDrag}
+          onDragLeave={handleDrag}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            border: `2px dashed ${fieldError ? '#dc2626' : preview ? '#059669' : dragActive ? '#3b82f6' : borderColor}`,
+            borderRadius: '14px',
+            padding: '20px',
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            background: preview ? 'rgba(5,150,105,0.05)' : dragActive ? 'rgba(59,130,246,0.05)' : (darkMode ? '#0f172a' : '#f8fafc'),
+            position: 'relative',
+            minHeight: '120px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {preview ? (
+            <div style={{ width: '100%' }}>
+              <img 
+                src={preview} 
+                alt={type === 'front' ? 'ID Front' : 'ID Back'} 
+                style={{ 
+                  maxHeight: '120px', 
+                  margin: '0 auto', 
+                  borderRadius: '8px',
+                  maxWidth: '100%',
+                  objectFit: 'contain',
+                }} 
+              />
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                alignItems: 'center', 
+                gap: '12px', 
+                marginTop: '8px' 
+              }}>
+                <span style={{ 
+                  color: '#059669', 
+                  fontWeight: 600, 
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}>
+                  <CheckCircle size={14} /> {t.uploaded}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(220,38,38,0.1)',
+                    border: '1px solid #dc2626',
+                    color: '#dc2626',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    fontFamily: "'Cairo', sans-serif",
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.3s ease',
+                  }}
+                  onMouseEnter={(e) => { e.target.style.background = 'rgba(220,38,38,0.2)'; }}
+                  onMouseLeave={(e) => { e.target.style.background = 'rgba(220,38,38,0.1)'; }}
+                >
+                  <X size={12} /> {t.remove}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ 
+                width: '48px', 
+                height: '48px', 
+                borderRadius: '12px', 
+                background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 8px',
+              }}>
+                {dragActive ? <Upload size={24} color="#3b82f6" /> : <Camera size={24} color="#3b82f6" />}
+              </div>
+              <p style={{ fontWeight: 600, color: textColor, fontSize: '0.9rem', marginBottom: '4px' }}>
+                {dragActive ? t.dragDrop : t.uploadText}
+              </p>
+              <p style={{ fontSize: '0.8rem', color: textSecondary }}>
+                {t.uploadHint}
+              </p>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={onFileChange}
+            style={{ display: 'none' }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // ✅ عرض صفحة النجاح
+  if (registrationSuccess) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: bgColor,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '40px 24px',
+        fontFamily: "'Cairo', sans-serif",
+        direction: lang === 'ar' ? 'rtl' : 'ltr',
+      }}>
+        <div style={{
+          background: cardBg,
+          borderRadius: '24px',
+          padding: '48px 40px',
+          maxWidth: '500px',
+          width: '100%',
+          textAlign: 'center',
+          border: `1px solid ${borderColor}`,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #059669, #10b981)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '20px',
+          }}>
+            <CheckCircle size={40} color="white" />
+          </div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#059669', marginBottom: '12px' }}>
+            {lang === 'ar' ? '🎉 تم إرسال الطلب!' : '🎉 Request Sent!'}
+          </h2>
+          <p style={{ color: textSecondary, fontSize: '1rem', lineHeight: 1.8, marginBottom: '24px' }}>
+            {registrationSuccess}
+          </p>
+          <Link
+            to="/login"
+            style={{
+              display: 'inline-block',
+              padding: '12px 32px',
+              borderRadius: '12px',
+              background: gradientBg,
+              color: 'white',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: '1rem',
+              fontFamily: "'Cairo', sans-serif",
+            }}
+          >
+            {t.login}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -488,7 +879,7 @@ const CraftsmanSignupPage = () => {
           {t.subtitle}
         </p>
 
-        {/* Messages */}
+        {/* ✅ رسائل الخطأ */}
         {error && (
           <div className="animate-fade-in" style={{
             background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
@@ -507,7 +898,8 @@ const CraftsmanSignupPage = () => {
           </div>
         )}
 
-        {success && (
+        {/* ✅ رسالة الموقع */}
+        {locationMessage && (
           <div className="animate-fade-in" style={{
             background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
             color: '#059669',
@@ -521,7 +913,7 @@ const CraftsmanSignupPage = () => {
             border: '1px solid rgba(5,150,105,0.2)',
           }}>
             <CheckCircle size={18} />
-            {success}
+            {locationMessage}
           </div>
         )}
 
@@ -582,7 +974,7 @@ const CraftsmanSignupPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
-                    {t.phone}
+                    {t.phone} <span style={{ color: '#dc2626' }}>*</span>
                   </label>
                   <div style={{ position: 'relative' }}>
                     <Phone size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
@@ -591,10 +983,11 @@ const CraftsmanSignupPage = () => {
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
-                      style={{ ...inputStyle(), paddingRight: '44px' }}
+                      style={{ ...inputStyle(errors.phone), paddingRight: '44px' }}
                       placeholder="01xxxxxxxxx"
                     />
                   </div>
+                  {errors.phone && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.phone}</span>}
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: textColor, marginBottom: '8px' }}>
@@ -646,7 +1039,6 @@ const CraftsmanSignupPage = () => {
                 {t.locationInfo}
               </h3>
 
-              {/* Location Method Toggle */}
               <div style={{
                 display: 'flex',
                 background: darkMode ? '#0f172a' : '#f1f5f9',
@@ -697,7 +1089,6 @@ const CraftsmanSignupPage = () => {
                 </button>
               </div>
 
-              {/* Auto Detect */}
               {locationMethod === 'auto' && (
                 <div style={{ textAlign: 'center', padding: '20px', marginBottom: '20px' }}>
                   <button
@@ -738,7 +1129,6 @@ const CraftsmanSignupPage = () => {
                 </div>
               )}
 
-              {/* Manual Location */}
               {locationMethod === 'manual' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
@@ -792,95 +1182,87 @@ const CraftsmanSignupPage = () => {
                 {t.professionInfo}
               </h3>
 
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ position: 'relative' }}>
-                  <Wrench size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
-                  <select
-                    name="profession"
-                    onChange={handleChange}
-                    value={formData.profession}
-                    style={{
-                      ...inputStyle(errors.profession),
-                      paddingRight: '44px',
-                      appearance: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="">{t.profession}</option>
-                    {professionsList.map(prof => (
-                      <option key={prof.name} value={prof.name}>{prof.icon} {prof.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
+              {loadingCrafts ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: textSecondary }}>
+                  <Loader size={24} className="animate-spin" style={{ margin: '0 auto 12px', display: 'block' }} />
+                  {t.loadingCrafts}
                 </div>
-                {errors.profession && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.profession}</span>}
-              </div>
+              ) : (
+                <>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <Wrench size={18} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
+                      <select
+                        name="profession"
+                        onChange={handleChange}
+                        value={formData.profession}
+                        style={{
+                          ...inputStyle(errors.profession),
+                          paddingRight: '44px',
+                          appearance: 'none',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">{t.chooseProfession}</option>
+                        {professionsList.map(prof => (
+                          <option key={prof.id} value={prof.name}>{prof.icon} {prof.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
+                    </div>
+                    {errors.profession && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.profession}</span>}
+                  </div>
 
-              {showCustomInput && (
-                <div style={{
-                  background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: '2px solid #3b82f6',
-                  marginBottom: '20px',
-                }}>
-                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#3b82f6', marginBottom: '8px' }}>
-                    {t.customProfession}
-                  </label>
-                  <input
-                    type="text"
-                    name="customProfession"
-                    value={formData.customProfession}
-                    onChange={handleChange}
-                    style={{
-                      ...inputStyle(errors.customProfession),
-                      background: 'white',
-                    }}
-                    placeholder={lang === 'ar' ? 'أدخل اسم المهنة الجديدة' : 'Enter new profession name'}
-                  />
-                  <p style={{ fontSize: '0.8rem', color: '#3b82f6', marginTop: '8px' }}>
-                    {t.customProfessionNote}
-                  </p>
-                </div>
+                  {showCustomInput && (
+                    <div style={{
+                      background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '2px solid #3b82f6',
+                      marginBottom: '20px',
+                    }}>
+                      <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, color: '#3b82f6', marginBottom: '8px' }}>
+                        {t.customProfession}
+                      </label>
+                      <input
+                        type="text"
+                        name="customProfession"
+                        value={formData.customProfession}
+                        onChange={handleChange}
+                        style={{
+                          ...inputStyle(errors.customProfession),
+                          background: 'white',
+                        }}
+                        placeholder={lang === 'ar' ? 'أدخل اسم المهنة الجديدة' : 'Enter new profession name'}
+                      />
+                      <p style={{ fontSize: '0.8rem', color: '#f59e0b', marginTop: '8px' }}>
+                        ⚠️ {t.customProfessionNote}
+                      </p>
+                      {errors.customProfession && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.customProfession}</span>}
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* ID Upload */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  border: `2px dashed ${formData.idImagePreview ? '#059669' : borderColor}`,
-                  borderRadius: '14px',
-                  padding: '24px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  background: formData.idImagePreview ? 'rgba(5,150,105,0.05)' : (darkMode ? '#0f172a' : '#f8fafc'),
-                  marginBottom: '8px',
-                }}
-              >
-                {formData.idImagePreview ? (
-                  <div>
-                    <CheckCircle size={28} style={{ color: '#059669', margin: '0 auto 8px' }} />
-                    <p style={{ fontWeight: 600, color: '#059669', fontSize: '0.9rem' }}>
-                      {lang === 'ar' ? 'تم رفع الصورة ✓' : 'Image Uploaded ✓'}
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <Camera size={28} style={{ color: textSecondary, margin: '0 auto 8px' }} />
-                    <p style={{ fontWeight: 600, color: textColor, fontSize: '0.9rem' }}>{t.uploadID}</p>
-                    <p style={{ fontSize: '0.8rem', color: textSecondary, marginTop: '6px' }}>{t.uploadText}</p>
-                  </div>
-                )}
-                <p style={{ fontSize: '0.75rem', color: textSecondary, marginTop: '10px' }}>{t.uploadHint}</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                />
-              </div>
+              {/* ✅ ID Upload - Front */}
+              <ImageUploadZone
+                type="front"
+                preview={formData.nationalIdFrontPreview}
+                onFileChange={(e) => handleFileChange(e, 'front')}
+                onRemove={() => removeImage('front')}
+                label={t.uploadIDFront}
+                fieldError={errors.nationalIdFront}
+              />
+
+              {/* ✅ ID Upload - Back */}
+              <ImageUploadZone
+                type="back"
+                preview={formData.nationalIdBackPreview}
+                onFileChange={(e) => handleFileChange(e, 'back')}
+                onRemove={() => removeImage('back')}
+                label={t.uploadIDBack}
+                fieldError={errors.nationalIdBack}
+              />
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button
@@ -1043,7 +1425,7 @@ const CraftsmanSignupPage = () => {
                   {isSubmitting ? (
                     <>
                       <Loader size={18} className="animate-spin" />
-                      {t.creating}
+                      {t.submitting}
                     </>
                   ) : (
                     <>

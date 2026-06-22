@@ -240,7 +240,7 @@ const RequestServicePage = () => {
     submitting: lang === 'ar' ? 'جاري إرسال الطلب...' : 'Submitting request...',
     successTitle: lang === 'ar' ? '🎉 تم إرسال طلبك بنجاح!' : '🎉 Request Sent Successfully!',
     successText: lang === 'ar' ? 'هيتم التواصل معاك قريب من الحرفيين المتاحين. تقدر تتابع حالة طلبك في الإشعارات.' : 'Available craftsmen will contact you soon. You can track your request status in notifications.',
-    viewRequests: lang === 'ar' ? 'متابعة الطلبات' : 'View Requests',
+    viewBookings: lang === 'ar' ? '📋 عرض حجوزاتي' : '📋 View My Bookings',
     backToHome: lang === 'ar' ? 'العودة للرئيسية' : 'Back to Home',
     optional: lang === 'ar' ? 'اختياري' : 'Optional',
     required: lang === 'ar' ? 'مطلوب' : 'Required',
@@ -283,12 +283,48 @@ const RequestServicePage = () => {
           </div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#059669', marginBottom: '12px' }}>{t.successTitle}</h1>
           <p style={{ color: textSecondary, marginBottom: '28px', lineHeight: 1.8, fontSize: '0.95rem' }}>{t.successText}</p>
+          
+          {/* ✅ أزرار جديدة بعد إرسال الطلب */}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Link to="/notifications" style={{ padding: '14px 28px', borderRadius: '14px', background: gradientBg, color: 'white', textDecoration: 'none', fontWeight: 700, fontFamily: "'Cairo', sans-serif", display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 16px rgba(37,99,235,0.3)', }}>
-              <Bell size={18} />{t.viewRequests}
-            </Link>
-            <Link to="/" style={{ padding: '14px 28px', borderRadius: '14px', border: `2px solid ${borderColor}`, color: textColor, textDecoration: 'none', fontWeight: 600, fontFamily: "'Cairo', sans-serif", display: 'flex', alignItems: 'center', gap: '8px', }}>
-              <Home size={18} />{t.backToHome}
+            <button
+              onClick={() => navigate('/my-bookings')}
+              style={{
+                padding: '14px 28px',
+                borderRadius: '14px',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                fontFamily: "'Cairo', sans-serif",
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+              }}
+            >
+              <Bell size={18} />
+              {t.viewBookings}
+            </button>
+            <Link
+              to="/"
+              style={{
+                padding: '14px 28px',
+                borderRadius: '14px',
+                border: `2px solid ${borderColor}`,
+                color: textColor,
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '0.95rem',
+                fontFamily: "'Cairo', sans-serif",
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Home size={18} />
+              {t.backToHome}
             </Link>
           </div>
         </div>

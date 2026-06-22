@@ -17,14 +17,13 @@ const LoginPage = () => {
   const [lang, setLang] = useState('ar');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('customer');
+  const [role, setRole] = useState('client'); // ✅ client (متوافق مع الباك إند)
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successLogin, setSuccessLogin] = useState(false);
 
-  // المسار الأصلي
   const from = location.state?.from?.pathname || '/';
 
   // Language
@@ -82,9 +81,12 @@ const LoginPage = () => {
     demoLogin: lang === 'ar' ? 'تسجيل دخول سريع' : 'Quick Login',
     demoCustomer: lang === 'ar' ? 'عميل تجريبي' : 'Demo Customer',
     demoCraftsman: lang === 'ar' ? 'حرفي تجريبي' : 'Demo Craftsman',
+    roleNote: lang === 'ar' 
+      ? '💡 نوع الحساب يتم تحديده تلقائياً من البيانات المسجلة' 
+      : '💡 Account type is automatically determined from registered data',
   };
 
-  // ✅ تسجيل الدخول مع التوجيه من الصفحة
+  // ✅ تسجيل الدخول
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -99,12 +101,18 @@ const LoginPage = () => {
     try {
       const result = await login(email, password);
 
+      // ❌ لو فشل تسجيل الدخول
       if (!result.success) {
         setError(result.message || t.invalidCredentials);
         setLoading(false);
         return;
       }
 
+      console.log('🔄 [LoginPage] Login result:', result);
+      console.log('🔄 [LoginPage] Role from backend:', result.role);
+      console.log('🔄 [LoginPage] Selected role in UI:', role);
+
+      // ✅ حفظ بيانات "تذكرني"
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', email);
         localStorage.setItem('rememberedRole', role);
@@ -115,8 +123,6 @@ const LoginPage = () => {
 
       setSuccessLogin(true);
       setLoading(false);
-
-      console.log('🔄 جاري التوجيه... role:', result.role, 'needsVerification:', result.needsVerification);
       
       // ✅ التحقق من البريد الإلكتروني أولاً
       if (result.needsVerification) {
@@ -126,15 +132,20 @@ const LoginPage = () => {
         return;
       }
 
-      // ✅ توجيه حسب الدور
+      // ✅ توجيه حسب الدور (متوافق مع الباك إند)
       setTimeout(() => {
-        if (result.role === 'customer') {
+        const userRole = result.role || 'client';
+        console.log('🔄 [LoginPage] Navigating with role:', userRole);
+        
+        // ✅ استخدام الأدوار الصحيحة من الباك إند
+        if (userRole === 'client') {
           navigate('/customer/home', { replace: true });
-        } else if (result.role === 'craftsman') {
+        } else if (userRole === 'craftsman') {
           navigate('/craftsman/home', { replace: true });
-        } else if (result.role === 'admin') {
+        } else if (userRole === 'admin') {
           navigate('/admin/dashboard', { replace: true });
         } else {
+          // ✅ العودة إلى الصفحة السابقة إذا كان الدور غير معروف
           navigate(from, { replace: true });
         }
       }, 800);
@@ -145,11 +156,14 @@ const LoginPage = () => {
     }
   };
 
-  // ✅ Demo Login مع التوجيه من الصفحة
+  // ✅ Demo Login
   const handleDemoLogin = async (demoRole) => {
+    // ✅ تحديث الـ role في الـ UI
     setRole(demoRole);
     
-    const demoEmail = demoRole === 'customer' ? 'customer@demo.com' : 'craftsman@demo.com';
+    const demoEmail = demoRole === 'client' 
+      ? 'client@demo.com' 
+      : 'craftsman@demo.com';
     
     setEmail(demoEmail);
     setPassword('12345678');
@@ -159,34 +173,42 @@ const LoginPage = () => {
     try {
       const result = await login(demoEmail, '12345678');
       
-      if (result.success) {
-        setSuccessLogin(true);
-        setLoading(false);
-        
-        console.log('🔄 Demo login - role:', result.role, 'needsVerification:', result.needsVerification);
-        
-        // ✅ التحقق من البريد الإلكتروني أولاً
-        if (result.needsVerification) {
-          setTimeout(() => {
-            navigate('/verify-email', { replace: true });
-          }, 800);
-          return;
-        }
-
-        // ✅ توجيه حسب الدور
-        setTimeout(() => {
-          if (result.role === 'customer') {
-            navigate('/customer/home', { replace: true });
-          } else if (result.role === 'craftsman') {
-            navigate('/craftsman/home', { replace: true });
-          } else {
-            navigate('/', { replace: true });
-          }
-        }, 800);
-      } else {
+      // ❌ لو فشل تسجيل الدخول
+      if (!result.success) {
         setError(result.message || 'فشل تسجيل الدخول التجريبي');
         setLoading(false);
+        return;
       }
+
+      setSuccessLogin(true);
+      setLoading(false);
+      
+      console.log('🔄 [LoginPage] Demo login - role from backend:', result.role);
+      console.log('🔄 [LoginPage] Demo login - selected role in UI:', demoRole);
+      
+      if (result.needsVerification) {
+        setTimeout(() => {
+          navigate('/verify-email', { replace: true });
+        }, 800);
+        return;
+      }
+
+      // ✅ توجيه حسب الدور (متوافق مع الباك إند)
+      setTimeout(() => {
+        const userRole = result.role || 'client';
+        console.log('🔄 [LoginPage] Demo navigating with role:', userRole);
+        
+        if (userRole === 'client') {
+          navigate('/customer/home', { replace: true });
+        } else if (userRole === 'craftsman') {
+          navigate('/craftsman/home', { replace: true });
+        } else if (userRole === 'admin') {
+          navigate('/admin/dashboard', { replace: true });
+        } else {
+          navigate('/', { replace: true });
+        }
+      }, 800);
+
     } catch (err) {
       setError(err.message || 'حدث خطأ');
       setLoading(false);
@@ -337,36 +359,57 @@ const LoginPage = () => {
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Role Selection */}
+            {/* ✅ Role Selection - تفاعلية مع الـ state */}
             <div className="animate-fade-in-up delay-100">
               <label style={{ display: 'block', fontWeight: '600', color: textColor, marginBottom: '10px', fontSize: '0.85rem' }}>
                 {t.roleLabel}
               </label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                {[
-                  { value: 'customer', label: t.customer, icon: <User size={20} /> },
-                  { value: 'craftsman', label: t.craftsman, icon: <Wrench size={20} /> },
-                ].map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => setRole(item.value)}
-                    style={{
-                      padding: '16px 12px', borderRadius: '14px',
-                      border: role === item.value ? '2px solid #3b82f6' : `2px solid ${borderColor}`,
-                      background: role === item.value ? (darkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff') : 'transparent',
-                      cursor: 'pointer', transition: 'all 0.3s ease',
-                      textAlign: 'center', fontFamily: "'Cairo', sans-serif",
-                    }}>
-                    <div style={{ color: role === item.value ? '#3b82f6' : textSecondary, marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
-                      {item.icon}
-                    </div>
-                    <div style={{ fontWeight: '700', color: role === item.value ? '#2563eb' : textColor, fontSize: '0.9rem' }}>
-                      {item.label}
-                    </div>
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setRole('client')}
+                  style={{
+                    padding: '16px 12px', borderRadius: '14px',
+                    border: role === 'client' ? '2px solid #3b82f6' : `2px solid ${borderColor}`,
+                    background: role === 'client' ? (darkMode ? 'rgba(59,130,246,0.15)' : '#eff6ff') : 'transparent',
+                    cursor: 'pointer', transition: 'all 0.3s ease',
+                    textAlign: 'center', fontFamily: "'Cairo', sans-serif",
+                  }}>
+                  <div style={{ color: role === 'client' ? '#3b82f6' : textSecondary, marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                    <User size={20} />
+                  </div>
+                  <div style={{ fontWeight: '700', color: role === 'client' ? '#2563eb' : textColor, fontSize: '0.9rem' }}>
+                    {t.customer}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole('craftsman')}
+                  style={{
+                    padding: '16px 12px', borderRadius: '14px',
+                    border: role === 'craftsman' ? '2px solid #f59e0b' : `2px solid ${borderColor}`,
+                    background: role === 'craftsman' ? (darkMode ? 'rgba(245,158,11,0.15)' : '#fef3c7') : 'transparent',
+                    cursor: 'pointer', transition: 'all 0.3s ease',
+                    textAlign: 'center', fontFamily: "'Cairo', sans-serif",
+                  }}>
+                  <div style={{ color: role === 'craftsman' ? '#f59e0b' : textSecondary, marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                    <Wrench size={20} />
+                  </div>
+                  <div style={{ fontWeight: '700', color: role === 'craftsman' ? '#d97706' : textColor, fontSize: '0.9rem' }}>
+                    {t.craftsman}
+                  </div>
+                </button>
               </div>
+              {/* ✅ ملاحظة توضيحية */}
+              <p style={{ 
+                fontSize: '0.7rem', 
+                color: textSecondary, 
+                textAlign: 'center', 
+                marginTop: '8px',
+                opacity: 0.7,
+              }}>
+                {t.roleNote}
+              </p>
             </div>
 
             {/* Email */}
@@ -468,7 +511,7 @@ const LoginPage = () => {
               {t.demoLogin}
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <button type="button" onClick={() => handleDemoLogin('customer')}
+              <button type="button" onClick={() => handleDemoLogin('client')}
                 style={{
                   padding: '10px', borderRadius: '10px', border: `1px solid ${borderColor}`,
                   background: 'transparent', cursor: 'pointer', color: textColor,

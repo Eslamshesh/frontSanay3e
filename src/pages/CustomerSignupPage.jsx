@@ -4,12 +4,25 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
-import { 
-  User, Mail, Phone, MapPin, Lock, Eye, EyeOff,
-  Navigation, Building, Home, ChevronDown,
-  CheckCircle, AlertCircle, Sparkles, ArrowRight,
-  Loader, Shield, Wrench
-} from 'lucide-react';
+import {
+  Mail,
+  User,
+  Loader,
+  Send,
+  Eye,
+  EyeOff,
+  MapPin,
+  Shield,
+  AlertCircle,
+  CheckCircle,
+  Navigation,
+  Building,
+  ChevronDown,
+  Home,
+  Lock,
+  Sparkles,
+  Phone,
+} from "lucide-react";
 
 const egyptianCities = [
   'القاهرة', 'الإسكندرية', 'الجيزة', 'حلوان', 'السادس من أكتوبر',
@@ -31,6 +44,15 @@ const CustomerSignupPage = () => {
   const [locationMethod, setLocationMethod] = useState('manual');
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ✅ OTP State
+  const [step, setStep] = useState('otp'); // 'otp' | 'verify' | 'register'
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [verifiedToken, setVerifiedToken] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [otpSuccess, setOtpSuccess] = useState('');
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -61,6 +83,15 @@ const CustomerSignupPage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
+  // ✅ لو رجع المستخدم لصفحة التسجيل، نتأكد من وجود verified_token
+  useEffect(() => {
+    const savedToken = localStorage.getItem('verified_token');
+    if (savedToken) {
+      setVerifiedToken(savedToken);
+      setStep('register');
+    }
+  }, []);
+
   // Translations
   const t = {
     title: lang === 'ar' ? 'إنشاء حساب جديد' : 'Create Account',
@@ -88,6 +119,21 @@ const CustomerSignupPage = () => {
     passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
     creating: lang === 'ar' ? 'جاري إنشاء الحساب...' : 'Creating account...',
     redirecting: lang === 'ar' ? 'جاري التوجيه...' : 'Redirecting...',
+    // OTP translations
+    otpTitle: lang === 'ar' ? 'تأكيد البريد الإلكتروني' : 'Verify Email',
+    otpSubtitle: lang === 'ar' ? 'أدخل بريدك الإلكتروني وسنرسل لك كود التحقق' : 'Enter your email and we\'ll send you a verification code',
+    otpPlaceholder: lang === 'ar' ? 'example@email.com' : 'example@email.com',
+    otpSend: lang === 'ar' ? 'إرسال كود التحقق' : 'Send Verification Code',
+    otpSending: lang === 'ar' ? 'جاري الإرسال...' : 'Sending...',
+    otpVerifyTitle: lang === 'ar' ? 'أدخل كود التحقق' : 'Enter Verification Code',
+    otpVerifySubtitle: lang === 'ar' ? 'أدخل الكود المكون من 6 أرقام المرسل إلى بريدك' : 'Enter the 6-digit code sent to your email',
+    otpPlaceholderCode: lang === 'ar' ? 'كود مكون من 6 أرقام' : '6-digit code',
+    otpVerify: lang === 'ar' ? 'تأكيد الكود' : 'Verify Code',
+    otpVerifying: lang === 'ar' ? 'جاري التحقق...' : 'Verifying...',
+    otpResend: lang === 'ar' ? 'إعادة إرسال الكود' : 'Resend Code',
+    otpBack: lang === 'ar' ? 'رجوع' : 'Back',
+    otpError: lang === 'ar' ? 'كود غير صحيح أو منتهي الصلاحية' : 'Invalid or expired code',
+    otpSuccess: lang === 'ar' ? 'تم التحقق بنجاح! أكمل بياناتك' : 'Verified successfully! Complete your details',
   };
 
   const handleChange = (e) => {
@@ -132,6 +178,80 @@ const CustomerSignupPage = () => {
     );
   };
 
+  // ✅ الخطوة 1: إرسال OTP
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setOtpError('');
+    setOtpSuccess('');
+    setOtpLoading(true);
+
+    if (!email.trim()) {
+      setOtpError(lang === 'ar' ? 'يرجى إدخال البريد الإلكتروني' : 'Please enter your email');
+      setOtpLoading(false);
+      return;
+    }
+
+    try {
+      const data = await api.sendOtp(email);
+      setOtpSuccess(data.message || 'تم إرسال كود التحقق');
+      setStep('verify');
+    } catch (err) {
+      setOtpError(err.message || 'حدث خطأ في إرسال الكود');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // ✅ الخطوة 2: تأكيد OTP
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setOtpError('');
+    setOtpSuccess('');
+    setOtpLoading(true);
+
+    if (!otp.trim() || otp.length < 6) {
+      setOtpError(lang === 'ar' ? 'يرجى إدخال الكود كاملاً' : 'Please enter the complete code');
+      setOtpLoading(false);
+      return;
+    }
+
+    try {
+      const data = await api.verifyOtp(email, otp, 'register');
+      setVerifiedToken(data.verified_token);
+      localStorage.setItem('verified_token', data.verified_token);
+      setOtpSuccess(data.message || 'تم التحقق بنجاح');
+      setStep('register');
+    } catch (err) {
+      setOtpError(err.message || t.otpError);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // ✅ إعادة إرسال OTP
+  const handleResendOtp = async () => {
+    setOtpError('');
+    setOtpSuccess('');
+    setOtpLoading(true);
+
+    try {
+      const data = await api.sendOtp(email);
+      setOtpSuccess(data.message || 'تم إعادة إرسال الكود');
+    } catch (err) {
+      setOtpError(err.message || 'حدث خطأ في إعادة الإرسال');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // ✅ العودة لخطوة OTP
+  const handleBackToOtp = () => {
+    setStep('otp');
+    setOtpError('');
+    setOtpSuccess('');
+    setOtp('');
+  };
+
   const validateForm = () => {
     const newErrors = {};
 
@@ -157,13 +277,20 @@ const CustomerSignupPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ تسجيل عميل - باستخدام api.registerClient
-  const handleSubmit = async (e) => {
+  // ✅ الخطوة 3: تسجيل العميل (مع verified_token)
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
     if (!validateForm()) return;
+
+    // ✅ التأكد من وجود verified_token
+    if (!verifiedToken) {
+      setError(lang === 'ar' ? 'يرجى تأكيد البريد الإلكتروني أولاً' : 'Please verify your email first');
+      setStep('otp');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -174,9 +301,13 @@ const CustomerSignupPage = () => {
         password: formData.password,
         password_confirmation: formData.confirmPassword,
         phone: formData.phone,
+        verified_token: verifiedToken, // ✅ مهم جداً
       });
 
       setSuccess(data.message || 'تم إنشاء الحساب بنجاح');
+      
+      // ✅ مسح verified_token بعد الاستخدام
+      localStorage.removeItem('verified_token');
       
       // ✅ حفظ الإيميل للتأكيد
       localStorage.setItem('pendingVerificationEmail', formData.email);
@@ -188,7 +319,6 @@ const CustomerSignupPage = () => {
 
     } catch (err) {
       if (err.errors) {
-        // ✅ عرض أخطاء validation من الباك
         const errorMessages = Object.values(err.errors).flat().join(' | ');
         setError(errorMessages);
       } else {
@@ -223,6 +353,777 @@ const CustomerSignupPage = () => {
     transition: 'all 0.3s ease',
     textAlign: 'right',
   });
+
+  // ✅ عرض OTP Step
+  const renderOtpStep = () => (
+    <form onSubmit={handleSendOtp}>
+      <div className="animate-fade-in-up" style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '16px',
+          background: gradientBg,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '16px',
+          boxShadow: '0 8px 24px rgba(59,130,246,0.3)',
+        }}>
+          <Mail size={28} color="white" />
+        </div>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: textColor, marginBottom: '8px' }}>
+          {t.otpTitle}
+        </h2>
+        <p style={{ color: textSecondary, fontSize: '0.95rem' }}>
+          {t.otpSubtitle}
+        </p>
+      </div>
+
+      {otpError && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+          color: '#dc2626',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(220,38,38,0.2)',
+        }}>
+          <AlertCircle size={18} />
+          {otpError}
+        </div>
+      )}
+
+      {otpSuccess && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+          color: '#059669',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(5,150,105,0.2)',
+        }}>
+          <CheckCircle size={18} />
+          {otpSuccess}
+        </div>
+      )}
+
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: textColor,
+          marginBottom: '8px',
+        }}>
+          {t.email}
+        </label>
+        <div style={{ position: 'relative' }}>
+          <Mail size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t.otpPlaceholder}
+            style={{ ...inputStyle(), paddingRight: '40px' }}
+            required
+          />
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={otpLoading}
+        className="animate-fade-in-up"
+        style={{
+          width: '100%',
+          padding: '14px',
+          borderRadius: '12px',
+          background: otpLoading ? '#94a3b8' : gradientBg,
+          color: 'white',
+          border: 'none',
+          cursor: otpLoading ? 'not-allowed' : 'pointer',
+          fontWeight: 700,
+          fontSize: '1rem',
+          fontFamily: "'Cairo', sans-serif",
+          transition: 'all 0.3s ease',
+          boxShadow: otpLoading ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          opacity: otpLoading ? 0.7 : 1,
+        }}
+      >
+        {otpLoading ? (
+          <>
+            <Loader size={18} className="animate-spin" />
+            {t.otpSending}
+          </>
+        ) : (
+          <>
+            <Send size={18} />
+            {t.otpSend}
+          </>
+        )}
+      </button>
+    </form>
+  );
+
+  // ✅ عرض Verify OTP Step
+  const renderVerifyStep = () => (
+    <form onSubmit={handleVerifyOtp}>
+      <div className="animate-fade-in-up" style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '16px',
+          background: gradientBg,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '16px',
+          boxShadow: '0 8px 24px rgba(59,130,246,0.3)',
+        }}>
+          <Shield size={28} color="white" />
+        </div>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: textColor, marginBottom: '8px' }}>
+          {t.otpVerifyTitle}
+        </h2>
+        <p style={{ color: textSecondary, fontSize: '0.95rem' }}>
+          {t.otpVerifySubtitle}
+        </p>
+        <p style={{ color: '#3b82f6', fontSize: '0.85rem', fontWeight: 600, marginTop: '4px' }}>
+          {email}
+        </p>
+      </div>
+
+      {otpError && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+          color: '#dc2626',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(220,38,38,0.2)',
+        }}>
+          <AlertCircle size={18} />
+          {otpError}
+        </div>
+      )}
+
+      {otpSuccess && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+          color: '#059669',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(5,150,105,0.2)',
+        }}>
+          <CheckCircle size={18} />
+          {otpSuccess}
+        </div>
+      )}
+
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: textColor,
+          marginBottom: '8px',
+        }}>
+          {lang === 'ar' ? 'كود التحقق' : 'Verification Code'}
+        </label>
+        <div style={{ position: 'relative' }}>
+          <input
+            type="text"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            placeholder={t.otpPlaceholderCode}
+            maxLength="6"
+            style={{ ...inputStyle(), textAlign: 'center', fontSize: '1.2rem', letterSpacing: '8px' }}
+            required
+          />
+        </div>
+        <p style={{ fontSize: '0.8rem', color: textSecondary, marginTop: '8px' }}>
+          {lang === 'ar' ? 'أدخل الكود المكون من 6 أرقام' : 'Enter the 6-digit code'}
+        </p>
+      </div>
+
+      <button
+        type="submit"
+        disabled={otpLoading}
+        style={{
+          width: '100%',
+          padding: '14px',
+          borderRadius: '12px',
+          background: otpLoading ? '#94a3b8' : gradientBg,
+          color: 'white',
+          border: 'none',
+          cursor: otpLoading ? 'not-allowed' : 'pointer',
+          fontWeight: 700,
+          fontSize: '1rem',
+          fontFamily: "'Cairo', sans-serif",
+          transition: 'all 0.3s ease',
+          boxShadow: otpLoading ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          opacity: otpLoading ? 0.7 : 1,
+        }}
+      >
+        {otpLoading ? (
+          <>
+            <Loader size={18} className="animate-spin" />
+            {t.otpVerifying}
+          </>
+        ) : (
+          <>
+            <CheckCircle size={18} />
+            {t.otpVerify}
+          </>
+        )}
+      </button>
+
+      <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+        <button
+          type="button"
+          onClick={handleBackToOtp}
+          style={{
+            flex: 1,
+            padding: '10px',
+            borderRadius: '10px',
+            border: `2px solid ${borderColor}`,
+            background: 'transparent',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            color: textColor,
+            fontFamily: "'Cairo', sans-serif",
+            transition: 'all 0.3s ease',
+          }}
+        >
+          {t.otpBack}
+        </button>
+        <button
+          type="button"
+          onClick={handleResendOtp}
+          disabled={otpLoading}
+          style={{
+            flex: 1,
+            padding: '10px',
+            borderRadius: '10px',
+            border: `2px solid ${borderColor}`,
+            background: 'transparent',
+            cursor: otpLoading ? 'not-allowed' : 'pointer',
+            fontWeight: 600,
+            fontSize: '0.85rem',
+            color: '#3b82f6',
+            fontFamily: "'Cairo', sans-serif",
+            transition: 'all 0.3s ease',
+            opacity: otpLoading ? 0.5 : 1,
+          }}
+        >
+          {t.otpResend}
+        </button>
+      </div>
+    </form>
+  );
+
+  // ✅ عرض Register Form (بعد التحقق)
+  const renderRegisterStep = () => (
+    <>
+      {otpSuccess && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+          color: '#059669',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(5,150,105,0.2)',
+        }}>
+          <CheckCircle size={18} />
+          {t.otpSuccess}
+        </div>
+      )}
+
+      {error && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+          color: '#dc2626',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(220,38,38,0.2)',
+        }}>
+          <AlertCircle size={18} />
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="animate-fade-in" style={{
+          background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+          color: '#059669',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          fontSize: '0.9rem',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          border: '1px solid rgba(5,150,105,0.2)',
+        }}>
+          <CheckCircle size={18} />
+          {success}
+        </div>
+      )}
+
+      {/* Names */}
+      <div className="animate-fade-in-up delay-300" style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+        marginBottom: '20px',
+      }}>
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: textColor,
+            marginBottom: '8px',
+          }}>
+            {t.firstName} <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <User size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+            <input
+              type="text"
+              name="firstName"
+              value={formData.firstName}
+              onChange={handleChange}
+              style={{ ...inputStyle(errors.firstName), paddingRight: '40px' }}
+              placeholder={lang === 'ar' ? 'محمد' : 'Mohamed'}
+            />
+          </div>
+          {errors.firstName && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.firstName}</span>
+          )}
+        </div>
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: textColor,
+            marginBottom: '8px',
+          }}>
+            {t.lastName} <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <User size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+            <input
+              type="text"
+              name="lastName"
+              value={formData.lastName}
+              onChange={handleChange}
+              style={{ ...inputStyle(errors.lastName), paddingRight: '40px' }}
+              placeholder={lang === 'ar' ? 'العلي' : 'Ali'}
+            />
+          </div>
+          {errors.lastName && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.lastName}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Email - محجوب (يُؤخذ من OTP) */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: textColor,
+          marginBottom: '8px',
+        }}>
+          {t.email} <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+        <div style={{ position: 'relative' }}>
+          <Mail size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+          <input
+            type="email"
+            value={email}
+            disabled
+            style={{ ...inputStyle(), paddingRight: '40px', opacity: 0.7, cursor: 'not-allowed' }}
+          />
+          <span style={{
+            position: 'absolute',
+            left: '14px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#059669',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+          }}>
+            ✅ {lang === 'ar' ? 'تم التأكيد' : 'Verified'}
+          </span>
+        </div>
+      </div>
+
+      {/* Phone */}
+      <div className="animate-fade-in-up delay-300" style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: textColor,
+          marginBottom: '8px',
+        }}>
+          {t.phone} <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+        <div style={{ position: 'relative' }}>
+          <Phone size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+          <input
+            type="tel"
+            name="phone"
+            value={formData.phone}
+            onChange={handleChange}
+            style={{ ...inputStyle(errors.phone), paddingRight: '40px' }}
+            placeholder="01xxxxxxxxx"
+          />
+        </div>
+        {errors.phone && (
+          <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.phone}</span>
+        )}
+      </div>
+
+      {/* Location Section */}
+      <div className="animate-fade-in-up delay-300" style={{ marginBottom: '20px' }}>
+        <label style={{
+          display: 'block',
+          fontSize: '0.875rem',
+          fontWeight: 600,
+          color: textColor,
+          marginBottom: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <MapPin size={16} style={{ color: '#ef4444' }} />
+          {lang === 'ar' ? 'الموقع' : 'Location'} <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+
+        {/* Location Method Toggle */}
+        <div style={{
+          display: 'flex',
+          background: darkMode ? '#0f172a' : '#f1f5f9',
+          borderRadius: '10px',
+          padding: '3px',
+          marginBottom: '12px',
+          gap: '2px',
+        }}>
+          <button
+            type="button"
+            onClick={() => setLocationMethod('auto')}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              fontFamily: "'Cairo', sans-serif",
+              background: locationMethod === 'auto' ? gradientBg : 'transparent',
+              color: locationMethod === 'auto' ? 'white' : textColor,
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+            }}
+          >
+            <Navigation size={14} />
+            {t.detectLocation}
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocationMethod('manual')}
+            style={{
+              flex: 1,
+              padding: '8px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              fontFamily: "'Cairo', sans-serif",
+              background: locationMethod === 'manual' ? gradientBg : 'transparent',
+              color: locationMethod === 'manual' ? 'white' : textColor,
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+            }}
+          >
+            <Building size={14} />
+            {t.manualLocation}
+          </button>
+        </div>
+
+        {/* Auto Detect */}
+        {locationMethod === 'auto' && (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <button
+              type="button"
+              onClick={detectLocation}
+              disabled={isLocating}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '10px',
+                border: `2px dashed ${formData.latitude ? '#059669' : '#3b82f6'}`,
+                background: formData.latitude ? 'rgba(5,150,105,0.05)' : 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                color: formData.latitude ? '#059669' : '#3b82f6',
+                fontFamily: "'Cairo', sans-serif",
+                transition: 'all 0.3s ease',
+              }}
+            >
+              {isLocating ? (
+                <Loader size={18} className="animate-spin" />
+              ) : formData.latitude ? (
+                <CheckCircle size={18} />
+              ) : (
+                <Navigation size={18} />
+              )}
+              {isLocating ? t.locating : formData.latitude ? t.locationDetected : t.detectLocation}
+            </button>
+            
+            {formData.latitude && (
+              <div style={{ marginTop: '8px', fontSize: '0.8rem', color: textSecondary }}>
+                📍 Lat: {formData.latitude.toFixed(4)}, Lng: {formData.longitude.toFixed(4)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Manual Location */}
+        {locationMethod === 'manual' && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+          }}>
+            <div>
+              <div style={{ position: 'relative' }}>
+                <Building size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
+                <select
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  style={{
+                    ...inputStyle(errors.city),
+                    paddingRight: '36px',
+                    appearance: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">{t.selectCity}</option>
+                  {egyptianCities.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+                <ChevronDown size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
+              </div>
+              {errors.city && (
+                <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.city}</span>
+              )}
+            </div>
+            <div>
+              <div style={{ position: 'relative' }}>
+                <Home size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+                <input
+                  type="text"
+                  name="district"
+                  value={formData.district}
+                  onChange={handleChange}
+                  style={{ ...inputStyle(), paddingRight: '36px' }}
+                  placeholder={lang === 'ar' ? 'مثال: مدينة نصر' : 'Ex: Nasr City'}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Passwords */}
+      <div className="animate-fade-in-up delay-300" style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+        marginBottom: '20px',
+      }}>
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: textColor,
+            marginBottom: '8px',
+          }}>
+            {t.password} <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <Lock size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              style={{ ...inputStyle(errors.password), paddingRight: '40px', paddingLeft: '40px' }}
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: textSecondary,
+                padding: '4px',
+              }}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {errors.password && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.password}</span>
+          )}
+        </div>
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: textColor,
+            marginBottom: '8px',
+          }}>
+            {t.confirmPassword} <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <div style={{ position: 'relative' }}>
+            <Lock size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
+            <input
+              type={showConfirmPassword ? 'text' : 'password'}
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              style={{ ...inputStyle(errors.confirmPassword), paddingRight: '40px', paddingLeft: '40px' }}
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: textSecondary,
+                padding: '4px',
+              }}
+            >
+              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {errors.confirmPassword && (
+            <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.confirmPassword}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Submit Button */}
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="animate-fade-in-up delay-300"
+        style={{
+          width: '100%',
+          padding: '14px',
+          borderRadius: '12px',
+          background: isSubmitting ? '#94a3b8' : gradientBg,
+          color: 'white',
+          border: 'none',
+          cursor: isSubmitting ? 'not-allowed' : 'pointer',
+          fontWeight: 700,
+          fontSize: '1rem',
+          fontFamily: "'Cairo', sans-serif",
+          transition: 'all 0.3s ease',
+          boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          marginTop: '4px',
+          opacity: isSubmitting ? 0.7 : 1,
+        }}
+      >
+        {isSubmitting ? (
+          <>
+            <Loader size={18} className="animate-spin" />
+            {t.creating}
+          </>
+        ) : (
+          <>
+            <Sparkles size={18} />
+            {t.submit}
+          </>
+        )}
+      </button>
+    </>
+  );
 
   return (
     <div style={{
@@ -328,480 +1229,39 @@ const CustomerSignupPage = () => {
           {t.subtitle}
         </p>
 
-        {/* Messages */}
-        {error && (
-          <div className="animate-fade-in" style={{
-            background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
-            color: '#dc2626',
-            padding: '12px 16px',
-            borderRadius: '12px',
-            fontSize: '0.9rem',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            border: '1px solid rgba(220,38,38,0.2)',
-          }}>
-            <AlertCircle size={18} />
-            {error}
-          </div>
+        {/* ✅ عرض الخطوة المناسبة */}
+        {step === 'otp' && renderOtpStep()}
+        {step === 'verify' && renderVerifyStep()}
+        {step === 'register' && (
+          <form onSubmit={handleRegister}>
+            {renderRegisterStep()}
+          </form>
         )}
 
-        {success && (
-          <div className="animate-fade-in" style={{
-            background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
-            color: '#059669',
-            padding: '12px 16px',
-            borderRadius: '12px',
-            fontSize: '0.9rem',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            border: '1px solid rgba(5,150,105,0.2)',
+        {/* Footer - يظهر فقط في خطوة التسجيل */}
+        {step === 'register' && (
+          <p className="animate-fade-in-up delay-300" style={{
+            textAlign: 'center',
+            fontSize: '0.95rem',
+            color: textSecondary,
+            marginTop: '24px',
           }}>
-            <CheckCircle size={18} />
-            {success}
-          </div>
+            {t.haveAccount}{' '}
+            <Link
+              to="/login"
+              style={{
+                color: '#3b82f6',
+                textDecoration: 'none',
+                fontWeight: 700,
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={(e) => { e.target.style.textDecoration = 'underline'; }}
+              onMouseLeave={(e) => { e.target.style.textDecoration = 'none'; }}
+            >
+              {t.login}
+            </Link>
+          </p>
         )}
-
-        <form onSubmit={handleSubmit}>
-          
-          {/* Names */}
-          <div className="animate-fade-in-up delay-300" style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            marginBottom: '20px',
-          }}>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: textColor,
-                marginBottom: '8px',
-              }}>
-                {t.firstName} <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <User size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  style={{ ...inputStyle(errors.firstName), paddingRight: '40px' }}
-                  placeholder={lang === 'ar' ? 'محمد' : 'Mohamed'}
-                />
-              </div>
-              {errors.firstName && (
-                <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.firstName}</span>
-              )}
-            </div>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: textColor,
-                marginBottom: '8px',
-              }}>
-                {t.lastName} <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <User size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  style={{ ...inputStyle(errors.lastName), paddingRight: '40px' }}
-                  placeholder={lang === 'ar' ? 'العلي' : 'Ali'}
-                />
-              </div>
-              {errors.lastName && (
-                <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.lastName}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Email */}
-          <div className="animate-fade-in-up delay-300" style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: textColor,
-              marginBottom: '8px',
-            }}>
-              {t.email} <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                style={{ ...inputStyle(errors.email), paddingRight: '40px' }}
-                placeholder="example@email.com"
-              />
-            </div>
-            {errors.email && (
-              <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.email}</span>
-            )}
-          </div>
-
-          {/* Phone */}
-          <div className="animate-fade-in-up delay-300" style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: textColor,
-              marginBottom: '8px',
-            }}>
-              {t.phone} <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-            <div style={{ position: 'relative' }}>
-              <Phone size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                style={{ ...inputStyle(errors.phone), paddingRight: '40px' }}
-                placeholder="01xxxxxxxxx"
-              />
-            </div>
-            {errors.phone && (
-              <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.phone}</span>
-            )}
-          </div>
-
-          {/* Location Section */}
-          <div className="animate-fade-in-up delay-300" style={{ marginBottom: '20px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: textColor,
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}>
-              <MapPin size={16} style={{ color: '#ef4444' }} />
-              {lang === 'ar' ? 'الموقع' : 'Location'} <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-
-            {/* Location Method Toggle */}
-            <div style={{
-              display: 'flex',
-              background: darkMode ? '#0f172a' : '#f1f5f9',
-              borderRadius: '10px',
-              padding: '3px',
-              marginBottom: '12px',
-              gap: '2px',
-            }}>
-              <button
-                type="button"
-                onClick={() => setLocationMethod('auto')}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  fontFamily: "'Cairo', sans-serif",
-                  background: locationMethod === 'auto' ? gradientBg : 'transparent',
-                  color: locationMethod === 'auto' ? 'white' : textColor,
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Navigation size={14} />
-                {t.detectLocation}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLocationMethod('manual')}
-                style={{
-                  flex: 1,
-                  padding: '8px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.8rem',
-                  fontFamily: "'Cairo', sans-serif",
-                  background: locationMethod === 'manual' ? gradientBg : 'transparent',
-                  color: locationMethod === 'manual' ? 'white' : textColor,
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Building size={14} />
-                {t.manualLocation}
-              </button>
-            </div>
-
-            {/* Auto Detect */}
-            {locationMethod === 'auto' && (
-              <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                <button
-                  type="button"
-                  onClick={detectLocation}
-                  disabled={isLocating}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: `2px dashed ${formData.latitude ? '#059669' : '#3b82f6'}`,
-                    background: formData.latitude ? 'rgba(5,150,105,0.05)' : 'transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    fontWeight: 600,
-                    fontSize: '0.9rem',
-                    color: formData.latitude ? '#059669' : '#3b82f6',
-                    fontFamily: "'Cairo', sans-serif",
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  {isLocating ? (
-                    <Loader size={18} className="animate-spin" />
-                  ) : formData.latitude ? (
-                    <CheckCircle size={18} />
-                  ) : (
-                    <Navigation size={18} />
-                  )}
-                  {isLocating ? t.locating : formData.latitude ? t.locationDetected : t.detectLocation}
-                </button>
-                
-                {formData.latitude && (
-                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: textSecondary }}>
-                    📍 Lat: {formData.latitude.toFixed(4)}, Lng: {formData.longitude.toFixed(4)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Manual Location */}
-            {locationMethod === 'manual' && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '12px',
-              }}>
-                <div>
-                  <div style={{ position: 'relative' }}>
-                    <Building size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      style={{
-                        ...inputStyle(errors.city),
-                        paddingRight: '36px',
-                        appearance: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <option value="">{t.selectCity}</option>
-                      {egyptianCities.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary, pointerEvents: 'none' }} />
-                  </div>
-                  {errors.city && (
-                    <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.city}</span>
-                  )}
-                </div>
-                <div>
-                  <div style={{ position: 'relative' }}>
-                    <Home size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-                    <input
-                      type="text"
-                      name="district"
-                      value={formData.district}
-                      onChange={handleChange}
-                      style={{ ...inputStyle(), paddingRight: '36px' }}
-                      placeholder={lang === 'ar' ? 'مثال: مدينة نصر' : 'Ex: Nasr City'}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Passwords */}
-          <div className="animate-fade-in-up delay-300" style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            marginBottom: '20px',
-          }}>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: textColor,
-                marginBottom: '8px',
-              }}>
-                {t.password} <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Lock size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  style={{ ...inputStyle(errors.password), paddingRight: '40px', paddingLeft: '40px' }}
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    left: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: textSecondary,
-                    padding: '4px',
-                  }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {errors.password && (
-                <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.password}</span>
-              )}
-            </div>
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: textColor,
-                marginBottom: '8px',
-              }}>
-                {t.confirmPassword} <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <Lock size={16} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', color: textSecondary }} />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  style={{ ...inputStyle(errors.confirmPassword), paddingRight: '40px', paddingLeft: '40px' }}
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={{
-                    position: 'absolute',
-                    left: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: textSecondary,
-                    padding: '4px',
-                  }}
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {errors.confirmPassword && (
-                <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '4px', display: 'block' }}>{errors.confirmPassword}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="animate-fade-in-up delay-300"
-            style={{
-              width: '100%',
-              padding: '14px',
-              borderRadius: '12px',
-              background: isSubmitting ? '#94a3b8' : gradientBg,
-              color: 'white',
-              border: 'none',
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              fontWeight: 700,
-              fontSize: '1rem',
-              fontFamily: "'Cairo', sans-serif",
-              transition: 'all 0.3s ease',
-              boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(59,130,246,0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              marginTop: '4px',
-              opacity: isSubmitting ? 0.7 : 1,
-            }}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader size={18} className="animate-spin" />
-                {t.creating}
-              </>
-            ) : (
-              <>
-                <Sparkles size={18} />
-                {t.submit}
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* Footer */}
-        <p className="animate-fade-in-up delay-300" style={{
-          textAlign: 'center',
-          fontSize: '0.95rem',
-          color: textSecondary,
-          marginTop: '24px',
-        }}>
-          {t.haveAccount}{' '}
-          <Link
-            to="/login"
-            style={{
-              color: '#3b82f6',
-              textDecoration: 'none',
-              fontWeight: 700,
-              transition: 'all 0.3s ease',
-            }}
-            onMouseEnter={(e) => { e.target.style.textDecoration = 'underline'; }}
-            onMouseLeave={(e) => { e.target.style.textDecoration = 'none'; }}
-          >
-            {t.login}
-          </Link>
-        </p>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
  * مكون لحماية المسارات
  * @param {Object} props
  * @param {React.ReactNode} props.children - الصفحة المراد حمايتها
- * @param {string} props.requiredRole - الدور المطلوب (customer, craftsman)
+ * @param {string} props.requiredRole - الدور المطلوب (client, craftsman)
  * @param {string} props.redirectTo - مسار إعادة التوجيه الافتراضي (اختياري)
  */
 const ProtectedRoute = ({ 
@@ -50,7 +50,7 @@ const ProtectedRoute = ({
   if (requiredRole && user.role !== requiredRole) {
     // توجيه ذكي حسب دور المستخدم الفعلي
     const redirectMap = {
-      'customer': '/customer/home',
+      'client': '/customer/home',
       'craftsman': '/craftsman/home',
       'admin': '/admin/dashboard',
     };

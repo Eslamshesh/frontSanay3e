@@ -1,8 +1,7 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000/api";
+const API_URL = process.env.REACT_APP_API_URL || "https://sanay3e-production.up.railway.app/api";
 
-
-// ✅ Token من localStorage مباشرة
+// ✅ دوال مساعدة
 const getHeaders = () => {
   const token = localStorage.getItem("token");
   return {
@@ -12,7 +11,6 @@ const getHeaders = () => {
   };
 };
 
-// ✅ Token للـ FormData
 const getFormHeaders = () => {
   const token = localStorage.getItem("token");
   return {
@@ -21,30 +19,22 @@ const getFormHeaders = () => {
   };
 };
 
-// ✅ معالجة الـ response - مع حماية كاملة
 const handleResponse = async (res) => {
-  // ✅ لو مفيش استجابة
   if (!res) {
     throw new Error("NETWORK_ERROR");
   }
 
   let data;
   try {
-    // ✅ محاولة قراءة الـ JSON
     data = await res.json();
   } catch (parseError) {
-    // ✅ لو الـ Response مش JSON (HTML أو فاضي)
     console.warn('⚠️ Response is not JSON, status:', res.status);
-    
-    // ✅ لو الـ Response 200 لكن مش JSON، نعتبرها نجاح
     if (res.ok) {
       return { success: true, message: "تم بنجاح" };
     }
-    
     throw new Error(`SERVER_ERROR_${res.status}`);
   }
 
-  // ✅ لو الـ Response مش成功 (4xx, 5xx)
   if (!res.ok) {
     const message = data.message || 
       (data.errors ? Object.values(data.errors).flat().join(" | ") : `خطأ ${res.status}`);
@@ -58,207 +48,16 @@ const handleResponse = async (res) => {
   return data;
 };
 
+// ============================================================
+// API Object
+// ============================================================
+
 const api = {
-
+  // ... جميع الدوال الموجودة ...
+  
   // ============================================================
-  // AUTH
+  // ✅ PUBLIC - الحرفيون
   // ============================================================
-
-  login: async (email, password) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ Login error:', error.message);
-      
-      // ✅ لو Network Error أو Server Error، نرمي خطأ مفهوم
-      if (error.message === "NETWORK_ERROR" || error.message === "Failed to fetch") {
-        throw new Error("لا يوجد اتصال بالخادم");
-      }
-      if (error.message.includes("SERVER_ERROR")) {
-        throw new Error("حدث خطأ في الخادم");
-      }
-      throw error;
-    }
-  },
-
-  registerClient: async (data) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/register/client`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ registerClient error:', error.message);
-      throw error;
-    }
-  },
-
-  registerCraftsman: async (formData) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/register/craftsman`, {
-        method: "POST",
-        headers: getFormHeaders(),
-        body: formData,
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ registerCraftsman error:', error.message);
-      throw error;
-    }
-  },
-
-  logout: async () => {
-    try {
-      const res = await fetch(`${API_URL}/auth/logout`, {
-        method: "DELETE",
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ logout error:', error.message);
-      // ✅ لو الباك مش شغال، نعتبر logout ناجح
-      return { success: true, message: "تم تسجيل الخروج" };
-    }
-  },
-
-  getMe: async () => {
-    try {
-      const res = await fetch(`${API_URL}/auth/me`, {
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ getMe error:', error.message);
-      throw error;
-    }
-  },
-
-  updateProfile: async (formData) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/update-profile`, {
-        method: "POST",
-        headers: getFormHeaders(),
-        body: formData,
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ updateProfile error:', error.message);
-      throw error;
-    }
-  },
-
-  changePassword: async (data) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/change-password`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ changePassword error:', error.message);
-      throw error;
-    }
-  },
-
-  // ============================================================
-  // OTP & VERIFICATION
-  // ============================================================
-
-  sendOtp: async (identifier, type = "email", purpose = "password_reset") => {
-    try {
-      const res = await fetch(`${API_URL}/auth/otp/send`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ identifier, type, purpose }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ sendOtp error:', error.message);
-      throw error;
-    }
-  },
-
-  verifyOtp: async (identifier, otp, purpose) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/otp/verify`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ identifier, otp, purpose }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ verifyOtp error:', error.message);
-      throw error;
-    }
-  },
-
-  forgotPassword: async (email) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ email }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ forgotPassword error:', error.message);
-      throw error;
-    }
-  },
-
-  resetPasswordWithOtp: async (reset_token, password, password_confirmation) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/reset-password-otp`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ reset_token, password, password_confirmation }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ resetPasswordWithOtp error:', error.message);
-      throw error;
-    }
-  },
-
-  verifyEmail: async (otp) => {
-    try {
-      const res = await fetch(`${API_URL}/auth/email/verify`, {
-        method: "POST",
-        headers: getHeaders(),
-        body: JSON.stringify({ otp }),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ verifyEmail error:', error.message);
-      throw error;
-    }
-  },
-
-  resendVerification: async () => {
-    try {
-      const res = await fetch(`${API_URL}/auth/email/resend`, {
-        method: "POST",
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ resendVerification error:', error.message);
-      throw error;
-    }
-  },
-
-  // ============================================================
-  // PUBLIC - الحرفيون (مع Fallback)
-  // ============================================================
-
   getFeaturedCraftsmen: async () => {
     try {
       const res = await fetch(`${API_URL}/craftsmen/featured`, {
@@ -315,9 +114,171 @@ const api = {
   },
 
   // ============================================================
-  // CLIENT ROUTES (مع Fallback)
+  // ✅ AUTH
   // ============================================================
+  login: async (email, password) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ email, password }),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ Login error:', error.message);
+      if (error.message === "NETWORK_ERROR" || error.message === "Failed to fetch") {
+        throw new Error("لا يوجد اتصال بالخادم");
+      }
+      if (error.message.includes("SERVER_ERROR")) {
+        throw new Error("حدث خطأ في الخادم");
+      }
+      throw error;
+    }
+  },
 
+  registerClient: async (data) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/register/client`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ registerClient error:', error.message);
+      throw error;
+    }
+  },
+
+  registerCraftsman: async (formData) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/register/craftsman`, {
+        method: "POST",
+        headers: getFormHeaders(),
+        body: formData,
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ registerCraftsman error:', error.message);
+      throw error;
+    }
+  },
+
+  logout: async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/logout`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ logout error:', error.message);
+      return { success: true, message: "تم تسجيل الخروج" };
+    }
+  },
+
+  getMe: async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/me`, {
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ getMe error:', error.message);
+      throw error;
+    }
+  },
+
+  updateProfile: async (formData) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/update-profile`, {
+        method: "POST",
+        headers: getFormHeaders(),
+        body: formData,
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ updateProfile error:', error.message);
+      throw error;
+    }
+  },
+
+  changePassword: async (data) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/change-password`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ changePassword error:', error.message);
+      throw error;
+    }
+  },
+
+  // ============================================================
+  // ✅ OTP & VERIFICATION
+  // ============================================================
+  sendOtp: async (email) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/otp/send`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ email }),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ sendOtp error:', error.message);
+      throw error;
+    }
+  },
+
+  verifyOtp: async (email, otp, purpose = 'register') => {
+    try {
+      const res = await fetch(`${API_URL}/auth/otp/verify`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ email, otp, purpose }),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ verifyOtp error:', error.message);
+      throw error;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ email }),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ forgotPassword error:', error.message);
+      throw error;
+    }
+  },
+
+  resetPasswordWithOtp: async (reset_token, password, password_confirmation) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/reset-password-otp`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ reset_token, password, password_confirmation }),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ resetPasswordWithOtp error:', error.message);
+      throw error;
+    }
+  },
+
+  // ============================================================
+  // ✅ CLIENT ROUTES
+  // ============================================================
   getMyBookings: async (tab = 'upcoming') => {
     try {
       const res = await fetch(`${API_URL}/client/bookings?tab=${tab}`, {
@@ -387,78 +348,9 @@ const api = {
     }
   },
 
-  getMyPosts: async () => {
-    try {
-      const res = await fetch(`${API_URL}/client/my-posts`, {
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ getMyPosts error:', error.message);
-      throw error;
-    }
-  },
-
-  createServicePost: async (formData) => {
-    try {
-      const res = await fetch(`${API_URL}/client/service-posts.store`, {
-        method: "POST",
-        headers: getFormHeaders(),
-        body: formData,
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ createServicePost error:', error.message);
-      throw error;
-    }
-  },
-
-  getServicePost: async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/client/service-posts/${id}`, {
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ getServicePost error:', error.message);
-      throw error;
-    }
-  },
-
-  deleteServicePost: async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/client/service-posts.destroy/${id}`, {
-        method: "DELETE",
-        headers: getHeaders(),
-      });
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ deleteServicePost error:', error.message);
-      throw error;
-    }
-  },
-
-  updatePostResponse: async (postId, responseId, status) => {
-    try {
-      const res = await fetch(
-        `${API_URL}/client/service-posts/${postId}/responses/${responseId}`,
-        {
-          method: "PATCH",
-          headers: getHeaders(),
-          body: JSON.stringify({ status }),
-        }
-      );
-      return await handleResponse(res);
-    } catch (error) {
-      console.warn('⚠️ updatePostResponse error:', error.message);
-      throw error;
-    }
-  },
-
   // ============================================================
-  // CRAFTSMAN ROUTES (مع Fallback)
+  // ✅ CRAFTSMAN ROUTES
   // ============================================================
-
   getCraftsmanStats: async () => {
     try {
       const res = await fetch(`${API_URL}/craftsman/stats`, {
@@ -467,16 +359,16 @@ const api = {
       return await handleResponse(res);
     } catch (error) {
       console.warn('⚠️ getCraftsmanStats fallback:', error.message);
-      return { 
-        stats: { 
-          total_earnings: 0, 
-          completed_bookings: 0, 
-          pending_bookings: 0, 
-          cancelled_bookings: 0, 
-          rating: 0, 
-          reviews_count: 0, 
-          is_featured: false 
-        } 
+      return {  
+        stats: {  
+          total_earnings: 0,  
+          completed_bookings: 0,  
+          pending_bookings: 0,  
+          cancelled_bookings: 0,  
+          rating: 0,  
+          reviews_count: 0,  
+          is_featured: false  
+        }  
       };
     }
   },
@@ -561,9 +453,79 @@ const api = {
   },
 
   // ============================================================
-  // UPLOAD
+  // ✅ SERVICE POSTS (CLIENT)
   // ============================================================
+  getMyPosts: async () => {
+    try {
+      const res = await fetch(`${API_URL}/client/my-posts`, {
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ getMyPosts error:', error.message);
+      throw error;
+    }
+  },
 
+  createServicePost: async (formData) => {
+    try {
+      const res = await fetch(`${API_URL}/client/service-posts.store`, {
+        method: "POST",
+        headers: getFormHeaders(),
+        body: formData,
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ createServicePost error:', error.message);
+      throw error;
+    }
+  },
+
+  getServicePost: async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/client/service-posts/${id}`, {
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ getServicePost error:', error.message);
+      throw error;
+    }
+  },
+
+  deleteServicePost: async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/client/service-posts.destroy/${id}`, {
+        method: "DELETE",
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ deleteServicePost error:', error.message);
+      throw error;
+    }
+  },
+
+  updatePostResponse: async (postId, responseId, status) => {
+    try {
+      const res = await fetch(
+        `${API_URL}/client/service-posts/${postId}/responses/${responseId}`,
+        {
+          method: "PATCH",
+          headers: getHeaders(),
+          body: JSON.stringify({ status }),
+        }
+      );
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ updatePostResponse error:', error.message);
+      throw error;
+    }
+  },
+
+  // ============================================================
+  // ✅ UPLOAD
+  // ============================================================
   uploadImage: async (file, type = "avatar") => {
     try {
       const formData = new FormData();
@@ -629,9 +591,8 @@ const api = {
   },
 
   // ============================================================
-  // NOTIFICATIONS (مع Fallback)
+  // ✅ NOTIFICATIONS
   // ============================================================
-
   getNotifications: async (unreadOnly = false, perPage = 20) => {
     try {
       const query = new URLSearchParams();

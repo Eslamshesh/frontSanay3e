@@ -2,22 +2,35 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom'; // ✅ إضافة
 import api from '../services/api';
 import { 
   User, Camera, Mail, Phone, MapPin, Home,
   Save, Lock, Trash2, CheckCircle,
-  Settings, Heart, Star, Clock, Loader
+  Settings, Heart, Star, Clock, Loader,
+  AlertCircle, Eye, EyeOff // ✅ إضافة
 } from 'lucide-react';
 
 const CustomerProfilePage = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth(); // ✅ إضافة logout
+  const navigate = useNavigate(); // ✅ إضافة
   const { darkMode } = useTheme();
   const [lang, setLang] = useState('ar');
   const [activeTab, setActiveTab] = useState('info');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(''); // ✅ إضافة
+  const [success, setSuccess] = useState(''); // ✅ إضافة
   const [avatar, setAvatar] = useState(null);
   const fileInputRef = useRef(null);
+
+  // ✅ State لتغيير كلمة المرور
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const [profile, setProfile] = useState({
     firstName: user?.name?.split(' ')[0] || '',
@@ -29,6 +42,9 @@ const CustomerProfilePage = () => {
     address: '',
   });
 
+  // ============================================================
+  // 🌍 Language
+  // ============================================================
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
@@ -37,7 +53,9 @@ const CustomerProfilePage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
+  // ============================================================
   // ✅ جلب بيانات العميل من API
+  // ============================================================
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -50,6 +68,9 @@ const CustomerProfilePage = () => {
             lastName: u.name?.split(' ')[1] || '',
             email: u.email || '',
             phone: u.phone || '',
+            city: u.city || u.address?.city || '',
+            district: u.district || u.address?.district || '',
+            address: u.address?.full || '',
           }));
           if (u.avatar_url) setAvatar(u.avatar_url);
         }
@@ -66,6 +87,9 @@ const CustomerProfilePage = () => {
     loadData();
   }, []);
 
+  // ============================================================
+  // 📝 Translations
+  // ============================================================
   const t = {
     profile: lang === 'ar' ? 'الملف الشخصي' : 'Profile',
     customer: lang === 'ar' ? 'عميل' : 'Customer',
@@ -90,11 +114,22 @@ const CustomerProfilePage = () => {
     deleteWarning: lang === 'ar' ? 'عند حذف حسابك، سيتم حذف جميع بياناتك بشكل نهائي ولا يمكن استعادتها.' : 'Deleting your account will permanently remove all your data and cannot be undone.',
     delete: lang === 'ar' ? 'حذف الحساب' : 'Delete Account',
     memberSince: lang === 'ar' ? 'عضو منذ' : 'Member since',
+    error: lang === 'ar' ? 'حدث خطأ' : 'Error',
+    retry: lang === 'ar' ? 'إعادة المحاولة' : 'Retry',
+    passwordChanged: lang === 'ar' ? 'تم تغيير كلمة المرور بنجاح' : 'Password changed successfully',
+    fillFields: lang === 'ar' ? 'يرجى ملء جميع الحقول' : 'Please fill in all fields',
+    passwordMismatch: lang === 'ar' ? 'كلمات المرور غير متطابقة' : 'Passwords do not match',
+    passwordMin: lang === 'ar' ? 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' : 'Password must be at least 6 characters',
   };
 
+  // ============================================================
+  // 🎨 Handlers
+  // ============================================================
   const handleChange = (e) => {
     const { name, value } = e.target;
     setProfile(prev => ({ ...prev, [name]: value }));
+    if (error) setError('');
+    if (success) setSuccess('');
   };
 
   const handleAvatarChange = (e) => {
@@ -109,10 +144,14 @@ const CustomerProfilePage = () => {
     }
   };
 
-  // ✅ حفظ الملف الشخصي - باستخدام api.updateProfile
+  // ============================================================
+  // ✅ حفظ الملف الشخصي
+  // ============================================================
   const handleSave = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setSuccess('');
 
     try {
       const formData = new FormData();
@@ -120,6 +159,9 @@ const CustomerProfilePage = () => {
       if (profile.firstName && profile.lastName) {
         formData.append('name', `${profile.firstName} ${profile.lastName}`);
       }
+      if (profile.city) formData.append('city', profile.city);
+      if (profile.district) formData.append('district', profile.district);
+      if (profile.address) formData.append('address', profile.address);
       if (avatar && avatar.startsWith('data:')) {
         const res = await fetch(avatar);
         const blob = await res.blob();
@@ -128,33 +170,102 @@ const CustomerProfilePage = () => {
 
       const data = await api.updateProfile(formData);
       
-      // تحديث بيانات المستخدم في Context
       if (data.user) {
         updateUser(data.user);
       }
       
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setSuccess(t.saved);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      console.warn('⚠️ Save error, using localStorage fallback:', error);
+      console.error('❌ Save error:', error);
+      setError(error.message || 'حدث خطأ في حفظ التغييرات');
+      // Fallback - حفظ في localStorage
       localStorage.setItem('customerProfile', JSON.stringify(profile));
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
     }
     setLoading(false);
   };
 
+  // ============================================================
+  // ✅ تغيير كلمة المرور
+  // ============================================================
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError(t.fillFields);
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError(t.passwordMin);
+      setLoading(false);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError(t.passwordMismatch);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await api.changePassword({
+        old_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirmation: confirmPassword,
+      });
+      
+      setSuccess(t.passwordChanged);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.message || 'حدث خطأ في تغيير كلمة المرور');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // ✅ حذف الحساب
+  // ============================================================
+  const handleDeleteAccount = async () => {
+    if (!window.confirm(t.deleteWarning)) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      await api.deleteAccount();
+      logout();
+      navigate('/');
+    } catch (error) {
+      setError(error.message || 'حدث خطأ في حذف الحساب');
+      setLoading(false);
+    }
+  };
+
+  // ============================================================
+  // 🎨 Styles
+  // ============================================================
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
   const cardBg = darkMode ? '#1e293b' : '#ffffff';
   const textColor = darkMode ? '#f1f5f9' : '#0f172a';
   const textSecondary = darkMode ? '#94a3b8' : '#64748b';
   const borderColor = darkMode ? '#334155' : '#e2e8f0';
   const inputBg = darkMode ? '#0f172a' : '#ffffff';
+  const errorColor = '#ef4444';
+  const successColor = '#059669';
 
-  const inputStyle = {
+  const inputStyle = (hasError) => ({
     width: '100%',
     padding: '12px 16px',
-    border: `2px solid ${borderColor}`,
+    border: `2px solid ${hasError ? errorColor : borderColor}`,
     borderRadius: '10px',
     fontSize: '0.95rem',
     color: textColor,
@@ -163,7 +274,7 @@ const CustomerProfilePage = () => {
     fontFamily: "'Cairo', sans-serif",
     transition: 'all 0.3s ease',
     textAlign: lang === 'ar' ? 'right' : 'left',
-  };
+  });
 
   return (
     <div style={{ background: bgColor, minHeight: '100vh', fontFamily: "'Cairo', sans-serif", direction: lang === 'ar' ? 'rtl' : 'ltr' }}>
@@ -173,13 +284,11 @@ const CustomerProfilePage = () => {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
         .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
-        .delay-100 { animation-delay: 0.1s; }
-        .delay-200 { animation-delay: 0.2s; }
         .animate-spin { animation: spin 1s linear infinite; }
         @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      {/* Hero */}
+      {/* ===== Hero ===== */}
       <div style={{
         background: darkMode ? 'linear-gradient(160deg, #1e3a8a, #1e40af)' : 'linear-gradient(160deg, #2563eb, #1d4ed8)',
         color: 'white', padding: '48px 0', textAlign: 'center',
@@ -221,10 +330,45 @@ const CustomerProfilePage = () => {
         </div>
       </div>
 
-      {/* Content */}
+      {/* ===== Content ===== */}
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: '32px 24px' }}>
         
-        {/* Tabs */}
+        {/* ===== Messages ===== */}
+        {error && (
+          <div className="animate-fade-in" style={{
+            background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+            color: errorColor,
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid rgba(220,38,38,0.2)',
+          }}>
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="animate-fade-in" style={{
+            background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
+            color: successColor,
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid rgba(5,150,105,0.2)',
+          }}>
+            <CheckCircle size={18} />
+            {success}
+          </div>
+        )}
+
+        {/* ===== Tabs ===== */}
         <div className="animate-fade-in-up" style={{
           display: 'flex', gap: '8px', marginBottom: '28px',
           background: cardBg, borderRadius: '14px', padding: '6px',
@@ -249,51 +393,41 @@ const CustomerProfilePage = () => {
           ))}
         </div>
 
-        {/* Info Tab */}
+        {/* ===== Info Tab ===== */}
         {activeTab === 'info' && (
           <div className="animate-fade-in-up">
-            {saved && (
-              <div style={{
-                background: darkMode ? 'rgba(5,150,105,0.1)' : '#d1fae5',
-                color: '#059669', padding: '14px 20px', borderRadius: '12px',
-                marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px',
-              }}>
-                <CheckCircle size={20} />{t.saved}
-              </div>
-            )}
-
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
               <form onSubmit={handleSave}>
                 <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.firstName}</label>
-                    <input type="text" name="firstName" value={profile.firstName} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="firstName" value={profile.firstName} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.lastName}</label>
-                    <input type="text" name="lastName" value={profile.lastName} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="lastName" value={profile.lastName} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
                 <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.email}</label>
-                    <input type="email" name="email" value={profile.email} onChange={handleChange} style={inputStyle} />
+                    <input type="email" name="email" value={profile.email} onChange={handleChange} style={inputStyle()} disabled />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.phone}</label>
-                    <input type="tel" name="phone" value={profile.phone} onChange={handleChange} style={inputStyle} />
+                    <input type="tel" name="phone" value={profile.phone} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
                 <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.city}</label>
-                    <input type="text" name="city" value={profile.city} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="city" value={profile.city} onChange={handleChange} style={inputStyle()} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.district}</label>
-                    <input type="text" name="district" value={profile.district} onChange={handleChange} style={inputStyle} />
+                    <input type="text" name="district" value={profile.district} onChange={handleChange} style={inputStyle()} />
                   </div>
                 </div>
 
@@ -302,7 +436,7 @@ const CustomerProfilePage = () => {
                     <Home size={14} style={{ display: 'inline', marginRight: '6px' }} />
                     {t.address}
                   </label>
-                  <input type="text" name="address" value={profile.address} onChange={handleChange} style={inputStyle}
+                  <input type="text" name="address" value={profile.address} onChange={handleChange} style={inputStyle()}
                     placeholder={lang === 'ar' ? 'رقم العمارة، اسم الشارع...' : 'Building no., street name...'}
                   />
                 </div>
@@ -323,36 +457,151 @@ const CustomerProfilePage = () => {
           </div>
         )}
 
-        {/* Settings Tab */}
+        {/* ===== Settings Tab ===== */}
         {activeTab === 'settings' && (
           <div className="animate-fade-in-up">
+            {/* ===== Change Password ===== */}
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}`, marginBottom: '20px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: textColor, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Lock size={18} style={{ color: '#3b82f6' }} />{t.changePassword}
               </h3>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.currentPassword}</label>
-                <input type="password" style={inputStyle} placeholder="••••••••" />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.newPassword}</label>
-                  <input type="password" style={inputStyle} placeholder="••••••••" />
+              
+              <form onSubmit={handleChangePassword}>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.currentPassword}</label>
+                  <div style={{ position: 'relative' }}>
+                    <input 
+                      type={showCurrentPassword ? 'text' : 'password'} 
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      style={inputStyle()}
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: textSecondary,
+                      }}
+                    >
+                      {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.confirmPassword}</label>
-                  <input type="password" style={inputStyle} placeholder="••••••••" />
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.newPassword}</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        style={inputStyle()}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        style={{
+                          position: 'absolute',
+                          left: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: textSecondary,
+                        }}
+                      >
+                        {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 600, color: textColor, marginBottom: '8px', fontSize: '0.85rem' }}>{t.confirmPassword}</label>
+                    <div style={{ position: 'relative' }}>
+                      <input 
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        style={inputStyle()}
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        style={{
+                          position: 'absolute',
+                          left: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: textSecondary,
+                        }}
+                      >
+                        {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <button style={{ padding: '12px 28px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Cairo', sans-serif" }}>{t.change}</button>
+                
+                <button type="submit" disabled={loading} style={{
+                  padding: '12px 28px',
+                  background: loading ? '#94a3b8' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif",
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: loading ? 0.7 : 1,
+                }}>
+                  {loading ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
+                  {t.change}
+                </button>
+              </form>
             </div>
 
+            {/* ===== Delete Account ===== */}
             <div style={{ background: cardBg, borderRadius: '16px', padding: '32px', border: `1px solid ${borderColor}` }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#dc2626', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: errorColor, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Trash2 size={18} />{t.deleteAccount}
               </h3>
               <p style={{ color: textSecondary, fontSize: '0.9rem', marginBottom: '20px', lineHeight: 1.6 }}>{t.deleteWarning}</p>
-              <button style={{ padding: '12px 28px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Cairo', sans-serif" }}>{t.delete}</button>
+              <button 
+                onClick={handleDeleteAccount}
+                disabled={loading}
+                style={{
+                  padding: '12px 28px',
+                  background: loading ? '#94a3b8' : errorColor,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cairo', sans-serif",
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                {t.delete}
+              </button>
             </div>
           </div>
         )}

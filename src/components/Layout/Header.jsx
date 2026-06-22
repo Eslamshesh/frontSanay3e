@@ -4,7 +4,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
-import { Wrench, Moon, Sun, Globe, Download, LogOut, Bell, Search, Star } from 'lucide-react';
+import { 
+  Wrench, Moon, Sun, Globe, Download, LogOut, Bell, 
+  Search, Star, LayoutDashboard, Calendar 
+} from 'lucide-react';
 
 const Header = () => {
   const { user, logout, isAuthenticated, isCustomer, isCraftsman } = useAuth();
@@ -47,7 +50,7 @@ const Header = () => {
   // Close mobile on route change
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
-  // ✅ جلب عدد الإشعارات غير المقروءة من notificationService
+  // ✅ جلب عدد الإشعارات غير المقروءة
   useEffect(() => {
     if (isAuthenticated) {
       const updateCount = async () => {
@@ -61,11 +64,7 @@ const Header = () => {
       };
       
       updateCount();
-      
-      // تحديث كل 30 ثانية
       const interval = setInterval(updateCount, 30000);
-      
-      // تحديث عند وصول إشعار جديد
       const handleNewNotification = () => updateCount();
       window.addEventListener('newNotification', handleNewNotification);
       
@@ -119,6 +118,8 @@ const Header = () => {
     services: lang === 'ar' ? 'الخدمات' : 'Services',
     reviews: lang === 'ar' ? 'التقييمات' : 'Reviews',
     notifications: lang === 'ar' ? 'الإشعارات' : 'Notifications',
+    dashboard: lang === 'ar' ? 'لوحة التحكم' : 'Dashboard',
+    myBookings: lang === 'ar' ? 'حجوزاتي' : 'My Bookings',
   };
 
   const headerBg = darkMode ? (scrolled ? 'rgba(15, 23, 42, 0.98)' : '#0f172a') : (scrolled ? 'rgba(255, 255, 255, 0.98)' : '#ffffff');
@@ -127,11 +128,23 @@ const Header = () => {
   const textMuted = darkMode ? '#94a3b8' : '#64748b';
 
   return (
-    <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, height: '64px', background: headerBg, backdropFilter: scrolled ? 'blur(12px)' : 'none', borderBottom: `1px solid ${borderColor}`, transition: 'all 0.3s ease', fontFamily: "'Cairo', sans-serif" }}>
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        
+    <header style={{ 
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, 
+      height: '64px', background: headerBg, backdropFilter: scrolled ? 'blur(12px)' : 'none', 
+      borderBottom: `1px solid ${borderColor}`, transition: 'all 0.3s ease', 
+      fontFamily: "'Cairo', sans-serif" 
+    }}>
+      <div style={{ 
+        maxWidth: '1280px', margin: '0 auto', padding: '0 24px', 
+        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' 
+      }}>
+        {/* Logo */}
         <Link to={getHomePath()} style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', flexShrink: 0 }}>
-          <div style={{ width: '36px', height: '36px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}>
+          <div style={{ 
+            width: '36px', height: '36px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', 
+            borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            boxShadow: '0 2px 8px rgba(59,130,246,0.3)' 
+          }}>
             <Wrench size={18} color="white" />
           </div>
           <div style={{ lineHeight: 1.2 }}>
@@ -140,44 +153,86 @@ const Header = () => {
           </div>
         </Link>
 
-        <button onClick={() => setMobileOpen(!mobileOpen)} style={{ display: 'none', background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: textColor, padding: '8px' }} className="mobile-menu-btn">
+        <button onClick={() => setMobileOpen(!mobileOpen)} style={{ 
+          display: 'none', background: 'none', border: 'none', fontSize: '24px', 
+          cursor: 'pointer', color: textColor, padding: '8px' 
+        }} className="mobile-menu-btn">
           {mobileOpen ? '✕' : '☰'}
         </button>
 
         <nav style={{ display: 'flex', alignItems: 'center', gap: '8px' }} className="main-nav">
+          {/* ✅ الرئيسية */}
           <Link to={getHomePath()} style={navLinkStyle(isActive('/') || isActive('/customer/home') || isActive('/craftsman/home'), darkMode)}>{t.home}</Link>
           
+          {/* ✅ الخدمات - للعميل فقط */}
           {isCustomer && <Link to="/search" style={navLinkStyle(isActive('/search'), darkMode)}><Search size={14} style={{ display: 'inline', marginLeft: '4px' }} />{t.services}</Link>}
           
+          {/* ✅ التقييمات - للعميل والحرفي */}
           {(isCustomer || isCraftsman) && <Link to="/reviews" style={navLinkStyle(isActive('/reviews'), darkMode)}><Star size={14} style={{ display: 'inline', marginLeft: '4px' }} />{t.reviews}</Link>}
           
-          <Link to="/about" style={navLinkStyle(isActive('/about'), darkMode)}>{t.about}</Link>
+          {/* ✅ حجوزاتي للعميل */}
+          {isCustomer && (
+            <Link to="/my-bookings" style={navLinkStyle(isActive('/my-bookings'), darkMode)}>
+              <Calendar size={14} style={{ display: 'inline', marginLeft: '4px' }} />
+              {t.myBookings}
+            </Link>
+          )}
+
+          {/* ✅ عن المنصة - تظهر فقط قبل تسجيل الدخول */}
+          {!isAuthenticated && (
+            <Link to="/about" style={navLinkStyle(isActive('/about'), darkMode)}>{t.about}</Link>
+          )}
 
           <div style={{ width: '1px', height: '24px', background: borderColor, margin: '0 4px' }} />
 
+          {/* Notifications */}
           {isAuthenticated && (
-            <Link to="/notifications" style={{ position: 'relative', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
-              onMouseEnter={(e) => e.target.style.background = darkMode ? '#334155' : '#f1f5f9'}
-              onMouseLeave={(e) => e.target.style.background = 'transparent'}>
+            <Link to="/notifications" style={{ 
+              position: 'relative', padding: '8px', borderRadius: '8px', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' 
+            }}
+              onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#334155' : '#f1f5f9'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
               <Bell size={20} style={{ color: textColor }} />
               {unreadCount > 0 && (
-                <span style={{ position: 'absolute', top: '2px', right: '2px', minWidth: '18px', height: '18px', borderRadius: '50%', background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', border: '2px solid white', animation: 'pulse 2s infinite' }}>
+                <span style={{ 
+                  position: 'absolute', top: '2px', right: '2px', minWidth: '18px', height: '18px', 
+                  borderRadius: '50%', background: '#ef4444', color: 'white', fontSize: '0.6rem', 
+                  fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  padding: '0 4px', border: '2px solid white', animation: 'pulse 2s infinite' 
+                }}>
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </span>
               )}
             </Link>
           )}
 
-          <button onClick={toggleLang} style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${borderColor}`, background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: textColor, display: 'flex', alignItems: 'center', gap: '4px', fontFamily: "'Cairo', sans-serif" }}>
+          <button onClick={toggleLang} style={{ 
+            padding: '6px 12px', borderRadius: '8px', border: `1px solid ${borderColor}`, 
+            background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: 600, 
+            color: textColor, display: 'flex', alignItems: 'center', gap: '4px', 
+            fontFamily: "'Cairo', sans-serif" 
+          }}>
             <Globe size={14} />{lang === 'ar' ? 'EN' : 'AR'}
           </button>
 
-          <button onClick={toggleTheme} style={{ padding: '8px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={toggleTheme} style={{ 
+            padding: '8px', borderRadius: '8px', border: 'none', background: 'transparent', 
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' 
+          }}>
             {darkMode ? <Sun size={18} color="#f59e0b" /> : <Moon size={18} color="#64748b" />}
           </button>
 
-          {!isInstalled && (
-            <button onClick={handleInstall} style={{ padding: '8px 16px', background: showInstall ? '#059669' : '#6366f1', color: 'white', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: "'Cairo', sans-serif", boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)', transition: 'all 0.3s', animation: showInstall ? 'pulse 2s infinite' : 'none' }}>
+          {/* ✅ تثبيت التطبيق - تظهر فقط قبل تسجيل الدخول */}
+          {!isInstalled && !isAuthenticated && (
+            <button onClick={handleInstall} style={{ 
+              padding: '8px 16px', background: showInstall ? '#059669' : '#6366f1', 
+              color: 'white', border: 'none', borderRadius: '10px', fontSize: '13px', 
+              fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', 
+              gap: '6px', fontFamily: "'Cairo', sans-serif", 
+              boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)', transition: 'all 0.3s', 
+              animation: showInstall ? 'pulse 2s infinite' : 'none' 
+            }}>
               <Download size={15} /><span className="hidden sm:inline">{t.install}</span>{showInstall && <span style={{ fontSize: '10px' }}>⚡</span>}
             </button>
           )}
@@ -187,22 +242,43 @@ const Header = () => {
           {isAuthenticated ? (
             <>
               <Link to="/profile" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.8rem' }}>
+                <div style={{ 
+                  width: '32px', height: '32px', borderRadius: '50%', 
+                  background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  color: 'white', fontWeight: 700, fontSize: '0.8rem' 
+                }}>
                   {user?.name?.charAt(0) || 'م'}
                 </div>
-                <span style={{ fontSize: '14px', fontWeight: 600, color: textColor, fontFamily: "'Cairo', sans-serif" }}>{user?.name?.split(' ')[0]}</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: textColor, fontFamily: "'Cairo', sans-serif" }}>
+                  {user?.name?.split(' ')[0]}
+                </span>
               </Link>
               <Link to="/profile" style={navLinkStyle(isActive('/profile'), darkMode)}>{t.profile}</Link>
-              <button onClick={logout} style={{ padding: '8px 16px', borderRadius: '10px', border: '2px solid #dc2626', color: '#dc2626', background: 'transparent', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: "'Cairo', sans-serif", transition: 'all 0.2s' }}
-                onMouseEnter={(e) => { e.target.style.background = '#dc2626'; e.target.style.color = 'white'; }}
-                onMouseLeave={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#dc2626'; }}>
+              <button onClick={logout} style={{ 
+                padding: '8px 16px', borderRadius: '10px', border: '2px solid #dc2626', 
+                color: '#dc2626', background: 'transparent', fontSize: '14px', fontWeight: 600, 
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', 
+                fontFamily: "'Cairo', sans-serif", transition: 'all 0.2s' 
+              }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = 'white'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#dc2626'; }}>
                 <LogOut size={16} />{t.logout}
               </button>
             </>
           ) : (
             <>
-              <Link to="/login" style={{ padding: '8px 20px', borderRadius: '10px', border: '2px solid #3b82f6', color: '#2563eb', fontSize: '14px', fontWeight: 600, textDecoration: 'none', transition: 'all 0.2s', fontFamily: "'Cairo', sans-serif" }}>{t.login}</Link>
-              <Link to="/select-role" style={{ padding: '8px 20px', borderRadius: '10px', background: '#2563eb', color: 'white', fontSize: '14px', fontWeight: 600, textDecoration: 'none', boxShadow: '0 2px 8px rgba(37,99,235,0.3)', transition: 'all 0.2s', fontFamily: "'Cairo', sans-serif" }}>{t.register}</Link>
+              <Link to="/login" style={{ 
+                padding: '8px 20px', borderRadius: '10px', border: '2px solid #3b82f6', 
+                color: '#2563eb', fontSize: '14px', fontWeight: 600, textDecoration: 'none', 
+                transition: 'all 0.2s', fontFamily: "'Cairo', sans-serif" 
+              }}>{t.login}</Link>
+              <Link to="/select-role" style={{ 
+                padding: '8px 20px', borderRadius: '10px', background: '#2563eb', 
+                color: 'white', fontSize: '14px', fontWeight: 600, textDecoration: 'none', 
+                boxShadow: '0 2px 8px rgba(37,99,235,0.3)', transition: 'all 0.2s', 
+                fontFamily: "'Cairo', sans-serif" 
+              }}>{t.register}</Link>
             </>
           )}
         </nav>

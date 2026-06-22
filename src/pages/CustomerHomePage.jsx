@@ -97,7 +97,6 @@ const CustomerHomePage = () => {
 
   const handleSearch = () => {
     if (searchTerm.trim()) {
-      // ✅ توجيه صحيح مع encodeURIComponent
       navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
     }
   };
@@ -280,12 +279,31 @@ const CustomerHomePage = () => {
       {/* Main Content */}
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
         
-        {/* Recent Bookings */}
-        {recentBookings.length > 0 && (
-          <div className="animate-fade-in-up" style={{ marginBottom: '32px' }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: textColor, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Clock size={20} style={{ color: '#3b82f6' }} />{t.recentRequests}
+        {/* Recent Bookings - مع زر "عرض الكل" */}
+        <div className="animate-fade-in-up" style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: textColor, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock size={20} style={{ color: '#3b82f6' }} />
+              {t.recentRequests}
             </h2>
+            <Link 
+              to="/my-bookings" 
+              style={{ 
+                color: '#3b82f6', 
+                fontSize: '0.85rem', 
+                fontWeight: 600, 
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              {t.viewAll}
+              <ChevronRight size={16} />
+            </Link>
+          </div>
+
+          {recentBookings.length > 0 ? (
             <div style={{ display: 'flex', gap: '12px', overflowX: 'auto' }}>
               {recentBookings.map((req, i) => (
                 <div key={i} style={{ background: cardBg, borderRadius: '14px', padding: '16px', border: `1px solid ${borderColor}`, minWidth: '250px', flexShrink: 0 }}>
@@ -309,8 +327,14 @@ const CustomerHomePage = () => {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div style={{ background: cardBg, borderRadius: '14px', padding: '24px', textAlign: 'center', border: `1px solid ${borderColor}` }}>
+              <p style={{ color: textSecondary, fontSize: '0.9rem' }}>
+                {lang === 'ar' ? 'لا توجد حجوزات حالية' : 'No bookings yet'}
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Categories */}
         <div className="animate-fade-in-up" style={{ marginBottom: '28px' }}>

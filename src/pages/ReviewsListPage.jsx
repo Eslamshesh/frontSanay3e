@@ -7,10 +7,13 @@ import {
   Star, TrendingUp, Users, Filter, ThumbsUp, 
   MessageSquare, Award, ChevronDown, Search,
   Calendar, User, CheckCircle, Sparkles,
-  BarChart3, PieChart, Loader, AlertCircle
+  BarChart3, PieChart, Loader, AlertCircle,
+  ArrowLeft
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ReviewsListPage = () => {
+  const navigate = useNavigate();
   const { darkMode } = useTheme();
   const { user } = useAuth();
   const [lang, setLang] = useState('ar');
@@ -25,8 +28,9 @@ const ReviewsListPage = () => {
     avg: 0,
     distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
   });
+  const [error, setError] = useState('');
 
-  // Language initialization
+  // ========== Language ==========
   useEffect(() => {
     const savedLang = localStorage.getItem('language') || 'ar';
     setLang(savedLang);
@@ -40,42 +44,88 @@ const ReviewsListPage = () => {
     return () => window.removeEventListener('languagechange', handleLanguageChange);
   }, []);
 
-  // ✅ جلب التقييمات من API
+  // ========== جلب التقييمات من API ==========
   useEffect(() => {
     const loadReviews = async () => {
       setLoading(true);
+      setError('');
+      
       try {
-        const data = await api.getAdminReviews();
-        const reviewsList = data.reviews?.data || data.reviews || [];
-        setReviews(reviewsList);
-        
-        // حساب الإحصائيات
-        const total = reviewsList.length;
-        const avg = total > 0 
-          ? (reviewsList.reduce((s, r) => s + (r.rating || 0), 0) / total).toFixed(1) 
-          : 0;
-        
+        // ✅ 1. جلب التقييمات الفعلية (من جدول reviews)
+        let reviewsData;
+        try {
+          // محاولة جلب التقييمات من endpoint مخصص
+          const data = await api.getReviews(); // هذا يجلب تقييمات الحرفي الحالي
+          reviewsData = data.reviews || data || [];
+        } catch (e) {
+          console.warn('⚠️ Could not load reviews directly, using alternative:', e);
+          
+          // ✅ 2. بديل: جلب الحرفيين مع التقييمات
+          const craftsmenData = await api.getCraftsmen({ 
+            sort_by: 'rating', 
+            per_page: 20 
+          });
+          
+          const craftsmen = craftsmenData.craftsmen || [];
+          
+          // ✅ تحويل الحرفيين إلى تقييمات (لكل حرفي لديه تقييم)
+          reviewsData = craftsmen
+            .filter(c => c.rating > 0) // فقط الحرفيين الذين لديهم تقييمات
+            .map(c => ({
+              id: c.id,
+              rating: c.rating || 0,
+              comment: c.bio || (lang === 'ar' 
+                ? `${c.profession || 'حرفي'} محترف يقدم خدمات ممتازة` 
+                : `Professional ${c.profession || 'craftsman'} providing excellent services`),
+              client_name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.name || (lang === 'ar' ? 'حرفي' : 'Craftsman'),
+              client_email: c.email || '',
+              profession: c.profession || c.crafts?.[0]?.name || (lang === 'ar' ? 'حرفي' : 'Craftsman'),
+              created_at: c.created_at || new Date().toISOString(),
+              craftsman_id: c.id,
+              helpful_count: c.helpful_count || 0,
+              title: c.title || '',
+            }));
+        }
+
+        // ✅ إذا لم توجد بيانات، استخدم Fallback
+        if (!reviewsData || reviewsData.length === 0) {
+          throw new Error('No reviews found');
+        }
+
+        setReviews(reviewsData);
+
+        // ✅ حساب الإحصائيات من التقييمات
+        const total = reviewsData.length;
+        const sum = reviewsData.reduce((s, r) => s + (r.rating || 0), 0);
+        const avg = total > 0 ? Math.round((sum / total) * 10) / 10 : 0;
+
         const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-        reviewsList.forEach(r => {
-          if (r.rating && dist[r.rating] !== undefined) {
-            dist[r.rating]++;
+        reviewsData.forEach(r => {
+          const rating = Math.round(r.rating || 0);
+          if (rating >= 1 && rating <= 5) {
+            dist[rating] = (dist[rating] || 0) + 1;
           }
         });
-        
+
         setStats({ total, avg, distribution: dist });
+
       } catch (error) {
         console.warn('⚠️ Reviews error, using fallback:', error);
-        // Fallback data
+        setError(error.message || (lang === 'ar' ? 'حدث خطأ في تحميل التقييمات' : 'Error loading reviews'));
+        
+        // ✅ Fallback data
         const fallbackReviews = [
-          { id: 1, rating: 5, comment: 'خدمة ممتازة جداً، الصنايعي محترف وأنيق', client_email: 'ahmed@example.com', profession: 'سباك', created_at: new Date().toISOString() },
-          { id: 2, rating: 4, comment: 'شغل كويس بس تأخر شوية', client_email: 'sara@example.com', profession: 'كهربائي', created_at: new Date().toISOString() },
-          { id: 3, rating: 5, comment: 'أفضل منصة لطلب صنايعية', client_email: 'mohamed@example.com', profession: 'نجار', created_at: new Date().toISOString() },
-          { id: 4, rating: 3, comment: 'خدمة مقبولة، لكن كان في بعض الأخطاء', client_email: 'nora@example.com', profession: 'دهان', created_at: new Date().toISOString() },
-          { id: 5, rating: 5, comment: 'سعر منصف وشغل نظيف، أنصح به', client_email: 'ali@example.com', profession: 'فني تكييف', created_at: new Date().toISOString() },
+          { id: 1, rating: 5, comment: 'خدمة ممتازة جداً، الصنايعي محترف وأنيق', client_name: 'أحمد محمد', client_email: 'ahmed@example.com', profession: 'سباك', created_at: new Date().toISOString() },
+          { id: 2, rating: 4, comment: 'شغل كويس بس تأخر شوية', client_name: 'سارة علي', client_email: 'sara@example.com', profession: 'كهربائي', created_at: new Date().toISOString() },
+          { id: 3, rating: 5, comment: 'أفضل منصة لطلب صنايعية', client_name: 'محمد حسين', client_email: 'mohamed@example.com', profession: 'نجار', created_at: new Date().toISOString() },
+          { id: 4, rating: 3, comment: 'خدمة مقبولة، لكن كان في بعض الأخطاء', client_name: 'نورا إبراهيم', client_email: 'nora@example.com', profession: 'دهان', created_at: new Date().toISOString() },
+          { id: 5, rating: 5, comment: 'سعر منصف وشغل نظيف، أنصح به', client_name: 'علي حسن', client_email: 'ali@example.com', profession: 'فني تكييف', created_at: new Date().toISOString() },
         ];
+        
         setReviews(fallbackReviews);
+        
         const total = fallbackReviews.length;
-        const avg = (fallbackReviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1);
+        const avg = total > 0 ? Math.round((fallbackReviews.reduce((s, r) => s + r.rating, 0) / total) * 10) / 10 : 0;
         const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
         fallbackReviews.forEach(r => {
           if (r.rating && dist[r.rating] !== undefined) dist[r.rating]++;
@@ -85,11 +135,11 @@ const ReviewsListPage = () => {
       setLoading(false);
     };
     loadReviews();
-  }, []);
+  }, [lang]);
 
-  // Translations
+  // ========== Translations ==========
   const t = {
-    title: lang === 'ar' ? 'التقييمات والمراجعات' : 'Ratings & Reviews',
+    title: lang === 'ar' ? 'التقييمات' : 'Reviews',
     subtitle: lang === 'ar' ? 'اطلع على آراء وتقييمات العملاء' : 'Check out customer ratings and reviews',
     totalReviews: (count) => lang === 'ar' ? `${count} تقييم` : `${count} reviews`,
     outOf5: lang === 'ar' ? 'من 5' : 'out of 5',
@@ -100,27 +150,29 @@ const ReviewsListPage = () => {
     lowest: lang === 'ar' ? 'الأقل تقييماً' : 'Lowest Rated',
     helpful: lang === 'ar' ? 'مفيد' : 'Helpful',
     loading: lang === 'ar' ? 'جاري تحميل التقييمات...' : 'Loading reviews...',
-    noReviews: lang === 'ar' ? 'لا توجد تقييمات تطابق بحثك' : 'No reviews match your search',
+    noReviews: lang === 'ar' ? 'لا توجد تقييمات' : 'No reviews',
     searchPlaceholder: lang === 'ar' ? 'ابحث في التقييمات...' : 'Search reviews...',
     ratingDistribution: lang === 'ar' ? 'توزيع التقييمات' : 'Rating Distribution',
     averageRating: lang === 'ar' ? 'متوسط التقييم' : 'Average Rating',
     totalCount: lang === 'ar' ? 'إجمالي التقييمات' : 'Total Reviews',
     stars: (count) => lang === 'ar' ? `${count} نجوم` : `${count} stars`,
+    viewProfile: lang === 'ar' ? 'عرض الملف' : 'View Profile',
+    back: lang === 'ar' ? 'العودة' : 'Back',
+    error: lang === 'ar' ? 'حدث خطأ' : 'Error',
+    retry: lang === 'ar' ? 'إعادة المحاولة' : 'Retry',
   };
 
-  // Filter and sort
+  // ========== Filter and Sort ==========
   let filtered = filter === 0 ? reviews : reviews.filter(r => r.rating === filter);
   
-  // Search
   if (searchQuery.trim()) {
     filtered = filtered.filter(r => 
       (r.comment && r.comment.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (r.client_email && r.client_email.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (r.title && r.title.toLowerCase().includes(searchQuery.toLowerCase()))
+      (r.client_name && r.client_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.profession && r.profession.toLowerCase().includes(searchQuery.toLowerCase()))
     );
   }
   
-  // Sort
   switch(sortBy) {
     case 'oldest':
       filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -136,21 +188,28 @@ const ReviewsListPage = () => {
   }
 
   const total = stats.total || reviews.length;
-  const avg = stats.avg || (total > 0 ? (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1) : '0');
+  const avg = stats.avg || (total > 0 ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / total) * 10) / 10 : 0);
   
   const dist = [5, 4, 3, 2, 1].map(star => ({
     star,
-    count: stats.distribution?.[star] || reviews.filter(r => r.rating === star).length,
-    percent: total > 0 ? Math.round(((stats.distribution?.[star] || reviews.filter(r => r.rating === star).length) / total) * 100) : 0
+    count: stats.distribution?.[star] || reviews.filter(r => Math.round(r.rating || 0) === star).length,
+    percent: total > 0 ? Math.round(((stats.distribution?.[star] || reviews.filter(r => Math.round(r.rating || 0) === star).length) / total) * 100) : 0
   }));
 
-  const handleHelpful = (reviewId) => {
+  const handleHelpful = async (reviewId) => {
     if (!helpfulClicked.includes(reviewId)) {
       setHelpfulClicked([...helpfulClicked, reviewId]);
+      
+      // ✅ تحديث عدد الإعجابات في الـ Backend (اختياري)
+      try {
+        await api.markReviewHelpful(reviewId);
+      } catch (e) {
+        console.warn('Could not mark helpful:', e);
+      }
     }
   };
 
-  // Dynamic colors
+  // ========== Styles ==========
   const bgColor = darkMode ? '#0f172a' : '#f8fafc';
   const cardBg = darkMode ? '#1e293b' : '#ffffff';
   const textColor = darkMode ? '#f1f5f9' : '#0f172a';
@@ -171,83 +230,34 @@ const ReviewsListPage = () => {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        
-        @keyframes slideRight {
-          from { opacity: 0; transform: translateX(-20px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        
         @keyframes growBar {
           from { width: 0 !important; }
         }
-        
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
-        }
-        
         @keyframes shimmer {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
-        
-        .animate-fade-in-up {
-          animation: fadeInUp 0.5s ease forwards;
-        }
-        
-        .animate-fade-in {
-          animation: fadeIn 0.3s ease forwards;
-        }
-        
-        .animate-slide-right {
-          animation: slideRight 0.4s ease forwards;
-        }
-        
-        .grow-bar {
-          animation: growBar 1.5s ease forwards;
-        }
-        
+        .animate-fade-in-up { animation: fadeInUp 0.5s ease forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+        .grow-bar { animation: growBar 1.5s ease forwards; }
         .delay-100 { animation-delay: 0.1s; }
         .delay-200 { animation-delay: 0.2s; }
         .delay-300 { animation-delay: 0.3s; }
         .delay-400 { animation-delay: 0.4s; }
-        .delay-500 { animation-delay: 0.5s; }
-        
-        .hover-lift {
-          transition: all 0.3s ease;
-        }
-        
-        .hover-lift:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-        }
-        
-        .filter-btn {
-          transition: all 0.3s ease;
-        }
-        
-        .filter-btn:hover {
-          transform: translateY(-2px);
-        }
-        
+        .hover-lift { transition: all 0.3s ease; }
+        .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
         .skeleton {
           background: linear-gradient(90deg, ${darkMode ? '#334155' : '#e2e8f0'} 25%, ${darkMode ? '#1e293b' : '#f1f5f9'} 50%, ${darkMode ? '#334155' : '#e2e8f0'} 75%);
           background-size: 200% 100%;
           animation: shimmer 1.5s infinite;
         }
-        
         @media (max-width: 768px) {
-          .stats-container {
-            flex-direction: column !important;
-          }
-          .filters-row {
-            flex-wrap: wrap !important;
-          }
+          .stats-container { flex-direction: column !important; }
+          .filters-row { flex-wrap: wrap !important; }
         }
       `}</style>
 
@@ -257,26 +267,36 @@ const ReviewsListPage = () => {
           ? 'linear-gradient(160deg, #1e3a8a, #1e40af)'
           : 'linear-gradient(160deg, #2563eb, #1d4ed8)',
         color: 'white',
-        padding: '48px 0',
-        textAlign: 'center',
+        padding: '32px 0',
       }}>
         <div style={{ maxWidth: '900px', margin: '0 auto', padding: '0 24px' }}>
-          <div className="animate-fade-in-up" style={{ marginBottom: '12px' }}>
-            <Award size={40} style={{ opacity: 0.9 }} />
+          <div className="animate-fade-in-up" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button 
+              onClick={() => navigate(-1)} 
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                border: 'none',
+                color: 'white',
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
+                {t.title}
+              </h1>
+              <p style={{ fontSize: '0.85rem', opacity: 0.85, margin: '2px 0 0' }}>
+                {t.totalReviews(total)} • {t.averageRating}: {avg} ⭐
+              </p>
+            </div>
           </div>
-          <h1 className="animate-fade-in-up delay-100" style={{
-            fontSize: '2rem',
-            fontWeight: 800,
-            marginBottom: '8px',
-          }}>
-            {t.title}
-          </h1>
-          <p className="animate-fade-in-up delay-200" style={{
-            fontSize: '1rem',
-            opacity: 0.85,
-          }}>
-            {t.subtitle}
-          </p>
         </div>
       </div>
 
@@ -286,14 +306,31 @@ const ReviewsListPage = () => {
         padding: '32px 24px',
       }}>
         
+        {/* Error */}
+        {error && (
+          <div className="animate-fade-in" style={{
+            background: darkMode ? 'rgba(220,38,38,0.1)' : '#fee2e2',
+            color: '#dc2626',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            border: '1px solid rgba(220,38,38,0.2)',
+          }}>
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+
         {/* Statistics Card */}
-        <div className="animate-fade-in-up delay-300" style={{
+        <div className="animate-fade-in-up delay-100" style={{
           background: cardBg,
           borderRadius: '20px',
           padding: '32px',
           border: `1px solid ${borderColor}`,
           marginBottom: '24px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
         }}>
           <div className="stats-container" style={{
             display: 'flex',
@@ -335,7 +372,7 @@ const ReviewsListPage = () => {
                 fontSize: '0.85rem',
                 color: textSecondary,
               }}>
-                {t.outOf5} ({t.totalReviews(total)})
+                {t.outOf5}
               </div>
             </div>
 
@@ -386,7 +423,6 @@ const ReviewsListPage = () => {
                         ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
                         : 'linear-gradient(90deg, #ef4444, #f87171)',
                       width: `${d.percent}%`,
-                      transition: 'width 1.5s ease',
                     }} />
                   </div>
                   <span style={{
@@ -412,7 +448,7 @@ const ReviewsListPage = () => {
         </div>
 
         {/* Filters Row */}
-        <div className="animate-fade-in-up delay-400" style={{
+        <div className="animate-fade-in-up delay-200" style={{
           display: 'flex',
           gap: '12px',
           marginBottom: '20px',
@@ -420,7 +456,6 @@ const ReviewsListPage = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          {/* Rating Filters */}
           <div className="filters-row" style={{
             display: 'flex',
             gap: '8px',
@@ -428,7 +463,6 @@ const ReviewsListPage = () => {
           }}>
             <button
               onClick={() => setFilter(0)}
-              className="filter-btn"
               style={{
                 padding: '8px 18px',
                 borderRadius: '50px',
@@ -447,7 +481,6 @@ const ReviewsListPage = () => {
               <button
                 key={s}
                 onClick={() => setFilter(s)}
-                className="filter-btn"
                 style={{
                   padding: '8px 16px',
                   borderRadius: '50px',
@@ -468,13 +501,11 @@ const ReviewsListPage = () => {
             ))}
           </div>
 
-          {/* Sort & Search */}
           <div style={{
             display: 'flex',
             gap: '8px',
             alignItems: 'center',
           }}>
-            {/* Search */}
             <div style={{ position: 'relative' }}>
               <Search size={16} style={{
                 position: 'absolute',
@@ -502,18 +533,11 @@ const ReviewsListPage = () => {
                   transition: 'all 0.3s ease',
                   textAlign: lang === 'ar' ? 'right' : 'left',
                 }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = accentColor;
-                  e.target.style.width = '220px';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = borderColor;
-                  if (!searchQuery) e.target.style.width = '180px';
-                }}
+                onFocus={(e) => { e.target.style.borderColor = accentColor; e.target.style.width = '220px'; }}
+                onBlur={(e) => { e.target.style.borderColor = borderColor; if (!searchQuery) e.target.style.width = '180px'; }}
               />
             </div>
 
-            {/* Sort */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -542,10 +566,7 @@ const ReviewsListPage = () => {
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {[1, 2, 3].map(i => (
-              <div key={i} className="skeleton" style={{
-                borderRadius: '14px',
-                height: '100px',
-              }} />
+              <div key={i} className="skeleton" style={{ borderRadius: '14px', height: '100px' }} />
             ))}
           </div>
         ) : filtered.length > 0 ? (
@@ -556,27 +577,25 @@ const ReviewsListPage = () => {
               style={{
                 background: cardBg,
                 borderRadius: '14px',
-                padding: '24px',
+                padding: '20px',
                 border: `1px solid ${borderColor}`,
                 marginBottom: '12px',
                 animationDelay: `${index * 0.05}s`,
               }}
             >
-              {/* Header */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'flex-start',
-                marginBottom: '12px',
+                marginBottom: '10px',
                 flexWrap: 'wrap',
                 gap: '10px',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {/* Avatar */}
                   <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '12px',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
                     background: darkMode ? '#334155' : '#eff6ff',
                     display: 'flex',
                     alignItems: 'center',
@@ -585,36 +604,24 @@ const ReviewsListPage = () => {
                     fontWeight: 700,
                     fontSize: '1rem',
                   }}>
-                    {(r.client_email || r.client?.name || 'U')[0].toUpperCase()}
+                    {(r.client_name || r.client_email || 'U')[0].toUpperCase()}
                   </div>
-                  
                   <div>
-                    <strong style={{
-                      fontSize: '0.95rem',
-                      color: textColor,
-                      display: 'block',
-                    }}>
-                      {r.client?.name || r.client_email?.split('@')[0] || (lang === 'ar' ? 'مستخدم' : 'User')}
+                    <strong style={{ fontSize: '0.9rem', color: textColor }}>
+                      {r.client_name || r.client_email?.split('@')[0] || (lang === 'ar' ? 'مستخدم' : 'User')}
                     </strong>
-                    <span style={{
-                      fontSize: '0.8rem',
-                      color: textSecondary,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}>
+                    <div style={{ fontSize: '0.75rem', color: textSecondary, display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Calendar size={12} />
                       {r.created_at?.split('T')[0] || r.created_at || ''}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Stars */}
                 <div style={{
                   display: 'flex',
                   gap: '2px',
                   background: darkMode ? 'rgba(245,158,11,0.1)' : '#fffbeb',
-                  padding: '6px 12px',
+                  padding: '4px 10px',
                   borderRadius: '20px',
                 }}>
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -628,61 +635,78 @@ const ReviewsListPage = () => {
                 </div>
               </div>
 
-              {/* Title */}
               {r.title && (
                 <h3 style={{
-                  fontSize: '0.9rem',
+                  fontSize: '0.85rem',
                   fontWeight: 600,
                   color: textColor,
-                  marginBottom: '6px',
+                  marginBottom: '4px',
                 }}>
                   {r.title}
                 </h3>
               )}
 
-              {/* Comment */}
               <p style={{
                 color: textSecondary,
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 lineHeight: 1.8,
-                marginBottom: '12px',
+                marginBottom: '10px',
               }}>
                 "{r.comment || r.message}"
               </p>
 
-              {/* Actions */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
               }}>
-                {/* Service info */}
                 <span style={{
-                  fontSize: '0.8rem',
+                  fontSize: '0.75rem',
                   color: textSecondary,
                   background: darkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
                   padding: '4px 10px',
                   borderRadius: '8px',
                 }}>
-                  🛠️ {r.craftsman?.profession || r.profession || (lang === 'ar' ? 'خدمة منزلية' : 'Home Service')}
+                  🛠️ {r.profession || (lang === 'ar' ? 'خدمة منزلية' : 'Home Service')}
                 </span>
 
-                {/* Helpful Button */}
+                {r.craftsman_id && (
+                  <button
+                    onClick={() => window.location.href = `/craftsman/${r.craftsman_id}`}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '8px',
+                      border: `1px solid ${accentColor}`,
+                      background: darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff',
+                      cursor: 'pointer',
+                      color: accentColor,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      fontFamily: "'Cairo', sans-serif",
+                      transition: 'all 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = accentColor; e.target.style.color = 'white'; }}
+                    onMouseLeave={(e) => { e.target.style.background = darkMode ? 'rgba(59,130,246,0.1)' : '#eff6ff'; e.target.style.color = accentColor; }}
+                  >
+                    {t.viewProfile}
+                  </button>
+                )}
+
                 <button
                   onClick={() => handleHelpful(r.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
+                    gap: '4px',
+                    padding: '4px 12px',
                     borderRadius: '8px',
                     border: `1px solid ${borderColor}`,
-                    background: helpfulClicked.includes(r.id) 
-                      ? (darkMode ? 'rgba(5,150,105,0.15)' : '#d1fae5')
-                      : 'transparent',
+                    background: helpfulClicked.includes(r.id) ? (darkMode ? 'rgba(5,150,105,0.15)' : '#d1fae5') : 'transparent',
                     cursor: helpfulClicked.includes(r.id) ? 'default' : 'pointer',
                     color: helpfulClicked.includes(r.id) ? '#059669' : textSecondary,
-                    fontSize: '0.8rem',
+                    fontSize: '0.75rem',
                     fontWeight: 600,
                     fontFamily: "'Cairo', sans-serif",
                     transition: 'all 0.3s ease',
@@ -690,9 +714,7 @@ const ReviewsListPage = () => {
                 >
                   <ThumbsUp size={14} />
                   {t.helpful}
-                  {helpfulClicked.includes(r.id) && (
-                    <CheckCircle size={14} />
-                  )}
+                  {helpfulClicked.includes(r.id) && <CheckCircle size={14} />}
                 </button>
               </div>
             </div>
