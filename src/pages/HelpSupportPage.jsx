@@ -52,34 +52,24 @@ const HelpSupportPage = () => {
   // ✅ جلب الأسئلة الشائعة من الـ Backend
   // ============================================================
   useEffect(() => {
-    const loadFaqs = async () => {
-      setLoadingFaqs(true);
-      try {
-        const data = await api.getFaqs();
-        setFaqs(data.faqs || []);
-      } catch (error) {
-        console.warn('⚠️ Using fallback FAQs:', error);
-        // ✅ Fallback FAQs
-        const fallbackFaqs = lang === 'ar' ? [
-          { id: 1, question: 'كيف يعمل تطبيق اطلب صنايعي؟', answer: 'يمكنك البحث عن حرفي أو إرسال طلب خدمة، وسنقوم بربطك بالمختص المناسب بناءً على موقعك وتقييمات الحرفيين. كل ما عليك هو اختيار التخصص المناسب وتحديد موعد الخدمة.' },
-          { id: 2, question: 'كيف أقوم بحجز خدمة جديدة؟', answer: 'يمكنك إرسال طلب خدمة من الصفحة الرئيسية، أو البحث عن حرفي والضغط على زر "احجز الآن" في ملفه الشخصي. ستتلقى تأكيداً فورياً بالحجز.' },
-          { id: 3, question: 'هل يمكنني تقييم الحرفي؟', answer: 'نعم، بعد اكتمال الخدمة يمكنك تقييم الحرفي وكتابة مراجعة عن تجربتك. تقييمك يساعد العملاء الآخرين في اختيار الحرفي المناسب.' },
-          { id: 4, question: 'ما هي طرق الدفع المتاحة؟', answer: 'نوفر طرق دفع متعددة: الدفع نقداً، InstaPay، Vodafone Cash، Etisalat Cash، Orange Cash، وبطاقات الائتمان.' },
-          { id: 5, question: 'كيف أتأكد من أن الحرفي موثوق؟', answer: 'جميع الحرفيين يمرون بعملية تحقق صارمة من الهوية والمهارات. يمكنك الاطلاع على التقييمات والمراجعات من العملاء السابقين.' },
-          { id: 6, question: 'هل يمكنني إلغاء الحجز؟', answer: 'نعم، يمكنك إلغاء الحجز قبل موعد الخدمة بـ 24 ساعة على الأقل دون أي رسوم.' },
-        ] : [
-          { id: 1, question: 'How does Atlob Sanay3y work?', answer: 'You can search for a craftsman or send a service request, and we will connect you with the right specialist based on your location and craftsman ratings. All you need to do is choose the appropriate specialty and schedule the service.' },
-          { id: 2, question: 'How do I book a new service?', answer: 'You can send a service request from the home page, or search for a craftsman and click "Book Now" on their profile. You will receive instant booking confirmation.' },
-          { id: 3, question: 'Can I rate the craftsman?', answer: 'Yes, after the service is completed, you can rate the craftsman and write a review about your experience. Your rating helps other customers choose the right craftsman.' },
-          { id: 4, question: 'What payment methods are available?', answer: 'We offer multiple payment methods: Cash, InstaPay, Vodafone Cash, Etisalat Cash, Orange Cash, and credit cards.' },
-          { id: 5, question: 'How do I verify that the craftsman is trustworthy?', answer: 'All craftsmen undergo a strict identity and skills verification process. You can view ratings and reviews from previous customers.' },
-          { id: 6, question: 'Can I cancel a booking?', answer: 'Yes, you can cancel your booking at least 24 hours before the service time without any fees.' },
-        ];
-        setFaqs(fallbackFaqs);
-      }
-      setLoadingFaqs(false);
-    };
-    loadFaqs();
+    // ✅ api.getFaqs() غير موجودة في الـ API — نستخدم البيانات الثابتة مباشرة
+    const staticFaqs = lang === 'ar' ? [
+      { id: 1, question: 'كيف يعمل تطبيق اطلب صنايعي؟', answer: 'يمكنك البحث عن حرفي أو إرسال طلب خدمة، وسنقوم بربطك بالمختص المناسب بناءً على موقعك وتقييمات الحرفيين. كل ما عليك هو اختيار التخصص المناسب وتحديد موعد الخدمة.' },
+      { id: 2, question: 'كيف أقوم بحجز خدمة جديدة؟', answer: 'يمكنك إرسال طلب خدمة من الصفحة الرئيسية، أو البحث عن حرفي والضغط على زر "احجز الآن" في ملفه الشخصي. ستتلقى تأكيداً فورياً بالحجز.' },
+      { id: 3, question: 'هل يمكنني تقييم الحرفي؟', answer: 'نعم، بعد اكتمال الخدمة يمكنك تقييم الحرفي وكتابة مراجعة عن تجربتك. تقييمك يساعد العملاء الآخرين في اختيار الحرفي المناسب.' },
+      { id: 4, question: 'ما هي طرق الدفع المتاحة؟', answer: 'نوفر طرق دفع متعددة: الدفع نقداً، InstaPay، Vodafone Cash، Etisalat Cash، Orange Cash، وبطاقات الائتمان.' },
+      { id: 5, question: 'كيف أتأكد من أن الحرفي موثوق؟', answer: 'جميع الحرفيين يمرون بعملية تحقق صارمة من الهوية والمهارات. يمكنك الاطلاع على التقييمات والمراجعات من العملاء السابقين.' },
+      { id: 6, question: 'هل يمكنني إلغاء الحجز؟', answer: 'نعم، يمكنك إلغاء الحجز قبل موعد الخدمة بـ 24 ساعة على الأقل دون أي رسوم.' },
+    ] : [
+      { id: 1, question: 'How does Atlob Sanay3y work?', answer: 'You can search for a craftsman or send a service request, and we will connect you with the right specialist based on your location and craftsman ratings. All you need to do is choose the appropriate specialty and schedule the service.' },
+      { id: 2, question: 'How do I book a new service?', answer: 'You can send a service request from the home page, or search for a craftsman and click "Book Now" on their profile. You will receive instant booking confirmation.' },
+      { id: 3, question: 'Can I rate the craftsman?', answer: 'Yes, after the service is completed, you can rate the craftsman and write a review about your experience. Your rating helps other customers choose the right craftsman.' },
+      { id: 4, question: 'What payment methods are available?', answer: 'We offer multiple payment methods: Cash, InstaPay, Vodafone Cash, Etisalat Cash, Orange Cash, and credit cards.' },
+      { id: 5, question: 'How do I verify that the craftsman is trustworthy?', answer: 'All craftsmen undergo a strict identity and skills verification process. You can view ratings and reviews from previous customers.' },
+      { id: 6, question: 'Can I cancel a booking?', answer: 'Yes, you can cancel your booking at least 24 hours before the service time without any fees.' },
+    ];
+    setFaqs(staticFaqs);
+    setLoadingFaqs(false);
   }, [lang]);
 
   // ============================================================

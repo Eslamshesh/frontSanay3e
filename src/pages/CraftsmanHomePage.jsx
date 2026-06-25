@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import notificationService from '../services/notificationService';
 import api from '../services/api';
 import { 
   Phone, Star, MapPin, Calendar,

@@ -9,35 +9,15 @@ import api from './api';
 const notificationService = {
 
   // ============================================================
-  // أنواع الإشعارات (حسب توثيق الباك)
+  // أنواع الإشعارات — القيم الحقيقية كما يُرجعها الباك (class names)
   // ============================================================
   types: {
-    // إشعارات العميل
-    BOOKING_ACCEPTED: 'booking_accepted',
-    BOOKING_REJECTED: 'booking_rejected',
-    BOOKING_REMINDER: 'booking_reminder',
-    CRAFTSMAN_ON_WAY: 'craftsman_on_way',
-    PAYMENT_REMINDER: 'payment_reminder',
-    NEW_MESSAGE_CUSTOMER: 'new_message_customer',
-    PROMOTION_CUSTOMER: 'promotion_customer',
-    SERVICE_COMPLETED: 'service_completed',
-    
-    // إشعارات الحرفي
-    NEW_REQUEST: 'new_request',
-    NEW_REVIEW: 'new_review',
-    JOB_REMINDER: 'job_reminder',
-    PAYMENT_RECEIVED: 'payment_received',
-    NEW_MESSAGE_CRAFTSMAN: 'new_message_craftsman',
-    PROMOTION_CRAFTSMAN: 'promotion_craftsman',
-    PROFILE_VIEWED: 'profile_viewed',
-
-    // إشعارات الأدمن
-    NEW_CRAFTSMAN_REGISTRATION: 'new_craftsman_registration',
-    NEW_BOOKING: 'new_booking',
-    BOOKING_STATUS_UPDATED: 'booking_status_updated',
-    NEW_SERVICE_POST: 'new_service_post',
-    NEW_POST_RESPONSE: 'new_post_response',
-    NEW_MESSAGE: 'new_message',
+    NEW_BOOKING: 'NewBookingNotification',                              // للحرفي: حجز جديد
+    BOOKING_STATUS_UPDATED: 'BookingStatusUpdatedNotification',         // للعميل: تحديث حالة الحجز
+    NEW_CRAFTSMAN_REGISTRATION: 'NewCraftsmanRegistrationNotification', // للأدمن: طلب تسجيل حرفي
+    NEW_SERVICE_POST: 'NewServicePostNotification',                     // للحرفي: منشور خدمة جديد
+    NEW_POST_RESPONSE: 'NewPostResponseNotification',                   // للعميل: رد على منشور
+    NEW_MESSAGE: 'NewMessageNotification',                              // للجميع: رسالة جديدة
   },
 
   // ============================================================
@@ -148,89 +128,50 @@ const notificationService = {
   // دوال مساعدة (Helper Functions)
   // ============================================================
 
-  // ✅ الحصول على أيقونة الإشعار حسب النوع
+  // ✅ الحصول على أيقونة الإشعار حسب النوع (class names من الباك)
   getNotificationIcon: (type) => {
     const icons = {
-      booking_accepted: '✅',
-      booking_rejected: '❌',
-      booking_reminder: '⏰',
-      craftsman_on_way: '🚶',
-      payment_reminder: '💰',
-      new_message_customer: '💬',
-      promotion_customer: '🎉',
-      service_completed: '✔️',
-      new_request: '📩',
-      new_review: '⭐',
-      job_reminder: '📋',
-      payment_received: '💳',
-      new_message_craftsman: '💬',
-      promotion_craftsman: '🚀',
-      profile_viewed: '👁️',
-      new_craftsman_registration: '👤',
-      new_booking: '📅',
-      booking_status_updated: '🔄',
-      new_service_post: '📢',
-      new_post_response: '💬',
-      new_message: '💬',
+      NewBookingNotification: '📅',
+      BookingStatusUpdatedNotification: '🔄',
+      NewCraftsmanRegistrationNotification: '👤',
+      NewServicePostNotification: '📢',
+      NewPostResponseNotification: '💬',
+      NewMessageNotification: '💬',
     };
     return icons[type] || '🔔';
   },
 
-  // ✅ الحصول على لون الإشعار حسب النوع
+  // ✅ الحصول على لون الإشعار حسب النوع (class names من الباك)
   getNotificationColor: (type) => {
     const colors = {
-      booking_accepted: '#059669',
-      booking_rejected: '#dc2626',
-      booking_reminder: '#f59e0b',
-      craftsman_on_way: '#3b82f6',
-      payment_reminder: '#ef4444',
-      new_message_customer: '#8b5cf6',
-      promotion_customer: '#ec4899',
-      service_completed: '#10b981',
-      new_request: '#f59e0b',
-      new_review: '#8b5cf6',
-      job_reminder: '#3b82f6',
-      payment_received: '#059669',
-      new_message_craftsman: '#8b5cf6',
-      promotion_craftsman: '#ec4899',
-      profile_viewed: '#6366f1',
-      new_craftsman_registration: '#8b5cf6',
-      new_booking: '#f59e0b',
-      booking_status_updated: '#3b82f6',
-      new_service_post: '#3b82f6',
-      new_post_response: '#ec4899',
-      new_message: '#6366f1',
+      NewBookingNotification: '#f59e0b',
+      BookingStatusUpdatedNotification: '#3b82f6',
+      NewCraftsmanRegistrationNotification: '#8b5cf6',
+      NewServicePostNotification: '#3b82f6',
+      NewPostResponseNotification: '#ec4899',
+      NewMessageNotification: '#6366f1',
     };
     return colors[type] || '#64748b';
   },
 
-  // ✅ الحصول على نص الإشعار حسب النوع والبيانات
+  // ✅ الحصول على نص الإشعار
+  // الباك بيرجع data.message جاهز — نستخدمه أولاً، وفي حالة غيابه نعمل fallback
   getNotificationText: (notification) => {
     const { type, data } = notification;
-    const messages = {
-      booking_accepted: `✅ تم قبول حجزك مع ${data?.craftsmanName || 'الحرفي'}`,
-      booking_rejected: `❌ تم رفض حجزك مع ${data?.craftsmanName || 'الحرفي'}`,
-      booking_reminder: `⏰ تذكير: لديك حجز مع ${data?.craftsmanName || 'الحرفي'} في ${data?.date || ''}`,
-      craftsman_on_way: `🚶 ${data?.craftsmanName || 'الحرفي'} في طريقه إليك، سيصل بعد ${data?.time || ''}`,
-      payment_reminder: `💰 تذكير بدفع مبلغ ${data?.amount || ''}`,
-      new_message_customer: `💬 رسالة جديدة من ${data?.from || ''}`,
-      promotion_customer: `🎉 ${data?.title || ''}: ${data?.desc || ''}`,
-      service_completed: `✔️ تم إكمال الخدمة بنجاح بواسطة ${data?.craftsmanName || 'الحرفي'}`,
-      new_request: `📩 طلب جديد من ${data?.customerName || 'عميل'}`,
-      new_review: `⭐ تقييم جديد من ${data?.customerName || 'عميل'} (${data?.rating || ''}⭐)`,
-      job_reminder: `📋 تذكير: لديك مهمة مع ${data?.customerName || 'عميل'} في ${data?.date || ''}`,
-      payment_received: `💰 تم استلام مبلغ ${data?.amount || ''} من ${data?.customerName || 'عميل'}`,
-      new_message_craftsman: `💬 رسالة جديدة من ${data?.from || ''}`,
-      promotion_craftsman: `🚀 ${data?.title || ''}: ${data?.desc || ''}`,
-      profile_viewed: `👁️ تمت مشاهدة ملفك الشخصي ${data?.count || 0} مرة ${data?.period || ''}`,
-      new_craftsman_registration: `👤 طلب تسجيل حرفي جديد: ${data?.name || ''}`,
-      new_booking: `📅 حجز جديد من ${data?.clientName || 'عميل'}`,
-      booking_status_updated: `🔄 تم تحديث حالة الحجز إلى: ${data?.status || ''}`,
-      new_service_post: `📢 منشور جديد: ${data?.title || ''}`,
-      new_post_response: `💬 رد جديد على منشورك من ${data?.craftsmanName || 'حرفي'}`,
-      new_message: `💬 رسالة جديدة`,
+
+    // الباك بيرجع data.message مباشرةً في كل الإشعارات — هذا هو المصدر الأساسي
+    if (data?.message) return data.message;
+
+    // Fallback لو data.message مش موجود (احتياطي)
+    const fallbacks = {
+      NewBookingNotification: `📅 حجز جديد من ${data?.client_name || 'عميل'}`,
+      BookingStatusUpdatedNotification: `🔄 تم تحديث حالة الحجز إلى: ${data?.status || ''}`,
+      NewCraftsmanRegistrationNotification: `👤 طلب تسجيل حرفي جديد: ${data?.name || ''}`,
+      NewServicePostNotification: `📢 منشور خدمة جديد: ${data?.title || ''}`,
+      NewPostResponseNotification: `💬 رد جديد على منشورك من ${data?.craftsman_name || 'حرفي'}`,
+      NewMessageNotification: `💬 رسالة جديدة`,
     };
-    return messages[type] || '🔔 لديك إشعار جديد';
+    return fallbacks[type] || '🔔 لديك إشعار جديد';
   },
 
   // ✅ تنسيق الوقت

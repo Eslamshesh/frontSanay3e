@@ -180,11 +180,14 @@ const CustomerSignupPage = () => {
 
   // ✅ الخطوة 1: إرسال OTP
   const handleSendOtp = async (e) => {
+    console.log('Send OTP clicked');
     e.preventDefault();
+    
+  console.log('1 - Entered handleSendOtp');
     setOtpError('');
     setOtpSuccess('');
     setOtpLoading(true);
-
+  console.log('2 - Email:', email);
     if (!email.trim()) {
       setOtpError(lang === 'ar' ? 'يرجى إدخال البريد الإلكتروني' : 'Please enter your email');
       setOtpLoading(false);
@@ -192,15 +195,24 @@ const CustomerSignupPage = () => {
     }
 
     try {
+       console.log('3 - Before api.sendOtp');
+      console.log('Email:', email);
       const data = await api.sendOtp(email);
       setOtpSuccess(data.message || 'تم إرسال كود التحقق');
       setStep('verify');
     } catch (err) {
-      setOtpError(err.message || 'حدث خطأ في إرسال الكود');
+       console.log('5 - Error Object:', err);
+  console.log('5 - Error Message:', err?.message);
+  console.log('5 - Error Stack:', err?.stack);
+
+
+  setOtpError(err.message || 'حدث خطأ في إرسال الكود');
     } finally {
+      console.log('6 - Finally');
       setOtpLoading(false);
     }
   };
+
 
   // ✅ الخطوة 2: تأكيد OTP
   const handleVerifyOtp = async (e) => {
@@ -218,6 +230,10 @@ const CustomerSignupPage = () => {
     try {
       const data = await api.verifyOtp(email, otp, 'register');
       setVerifiedToken(data.verified_token);
+      setFormData(prev => ({
+  ...prev,
+  email: email
+}));
       localStorage.setItem('verified_token', data.verified_token);
       setOtpSuccess(data.message || 'تم التحقق بنجاح');
       setStep('register');
@@ -235,6 +251,7 @@ const CustomerSignupPage = () => {
     setOtpLoading(true);
 
     try {
+  //    console.log('Email:', email);
       const data = await api.sendOtp(email);
       setOtpSuccess(data.message || 'تم إعادة إرسال الكود');
     } catch (err) {
@@ -309,13 +326,17 @@ const CustomerSignupPage = () => {
       // ✅ مسح verified_token بعد الاستخدام
       localStorage.removeItem('verified_token');
       
-      // ✅ حفظ الإيميل للتأكيد
-      localStorage.setItem('pendingVerificationEmail', formData.email);
+
+setTimeout(() => {
+  navigate('/login');
+}, 2000);
+      // // ✅ حفظ الإيميل للتأكيد
+      // localStorage.setItem('pendingVerificationEmail', formData.email);
       
-      // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
-      setTimeout(() => {
-        navigate('/verify-email');
-      }, 2000);
+      // // ✅ توجيه إلى صفحة تأكيد البريد بعد 2 ثانية
+      // setTimeout(() => {
+      //   navigate('/verify-email');
+      // }, 2000);
 
     } catch (err) {
       if (err.errors) {

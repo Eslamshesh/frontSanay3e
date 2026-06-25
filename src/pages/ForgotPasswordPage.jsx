@@ -100,7 +100,7 @@ const ForgotPasswordPage = () => {
     setLoading(true);
     
     try {
-      const data = await api.sendOtp(email, 'email', 'password_reset');
+      const data = await api.sendOtp(email);
       
       setSuccess(data.message || t.codeSent);
       setResendTimer(60);
@@ -218,7 +218,7 @@ const ForgotPasswordPage = () => {
     setSuccess('');
     
     try {
-      const data = await api.sendOtp(email, 'email', 'password_reset');
+      const data = await api.sendOtp(email);
       setSuccess(data.message || t.codeSent);
       setResendTimer(60);
       setCode(['', '', '', '', '', '']);

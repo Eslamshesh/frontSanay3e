@@ -33,6 +33,8 @@ import CraftsmanHomePage from './pages/CraftsmanHomePage';
 import MyBookingsPage from './pages/MyBookingsPage';
 import NotificationsViewPage from './pages/NotificationsViewPage';
 import ServicePostDetailPage from './pages/ServicePostDetailPage';
+import ClientPostsPage from './pages/ClientPostsPage';
+import CraftsmanPostsPage from './pages/CraftsmanPostsPage';
 
 // ============================================================
 // ProfileRouter
@@ -139,6 +141,11 @@ function App() {
                     <MyBookingsPage />
                   </ProtectedRoute>
                 } />
+                <Route path="/my-posts" element={
+                  <ProtectedRoute requiredRole="client">
+                    <ClientPostsPage />
+                  </ProtectedRoute>
+                } />
 
                 {/* ===== صفحات الحرفي ===== */}
                 <Route path="/craftsman/home" element={
@@ -149,6 +156,11 @@ function App() {
                 <Route path="/subscription" element={
                   <ProtectedRoute requiredRole="craftsman">
                     <SubscriptionPage />
+                  </ProtectedRoute>
+                } />
+                <Route path="/craftsman/posts" element={
+                  <ProtectedRoute requiredRole="craftsman">
+                    <CraftsmanPostsPage />
                   </ProtectedRoute>
                 } />
 

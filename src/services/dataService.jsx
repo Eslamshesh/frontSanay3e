@@ -1,63 +1,64 @@
-const API_URL = process.env.REACT_APP_API_URL;
+// src/services/dataService.jsx
+// ⚠️ هذا الملف deprecated — استخدمي api.js مباشرةً في الكود الجديد
+// تم تحويله ليستخدم api.js الحقيقي بدلاً من endpoints قديمة غير موجودة
 
-const handleResponse = async (res) => {
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.message || "API Error");
-  return data;
-};
+import api from './api';
 
 const dataService = {
-  getCraftsmen: () =>
-    fetch(`${API_URL}/craftsmen`).then(handleResponse),
 
-  getPendingCraftsmen: () =>
-    fetch(`${API_URL}/craftsmen?verified=false`).then(handleResponse),
+  // جلب الحرفيين (بحث وفلترة) — يقابل GET /api/craftsmen.home.search
+  getCraftsmen: (params = {}) =>
+    api.getCraftsmen(params),
 
-  verifyCraftsman: (id) =>
-    fetch(`${API_URL}/craftsmen/${id}/verify`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" }
-    }).then(handleResponse),
+  // جلب المهن المتاحة — يقابل GET /api/crafts
+  getCrafts: () =>
+    api.getCrafts(),
 
-  getUsers: () =>
-    fetch(`${API_URL}/users`).then(handleResponse),
+  // جلب الحرفيين المميزين — يقابل GET /api/craftsmen/featured
+  getFeaturedCraftsmen: () =>
+    api.getFeaturedCraftsmen(),
 
+  // جلب تفاصيل حرفي — يقابل GET /api/craftsmen.home.show/{id}
+  getCraftsman: (id) =>
+    api.getCraftsman(id),
+
+  // إنشاء حجز (كان createRequest) — يقابل POST /api/client/bookings.store
+  // data: { craftsman_id, service_id?, service_title?, booking_date, booking_time, notes?, location? }
   createRequest: (data) =>
-    fetch(`${API_URL}/requests`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+    api.createBooking(data),
 
-  getRequests: () =>
-    fetch(`${API_URL}/requests`).then(handleResponse),
+  // جلب حجوزات العميل — يقابل GET /api/client/bookings
+  getRequests: (tab = 'upcoming') =>
+    api.getMyBookings(tab),
 
-  addReview: (data) =>
-    fetch(`${API_URL}/reviews`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+  // جلب حجوزات الحرفي — يقابل GET /api/craftsman/bookings
+  getCraftsmanBookings: () =>
+    api.getCraftsmanBookings(),
 
-  getReviews: () =>
-    fetch(`${API_URL}/reviews`).then(handleResponse),
+  // إضافة تقييم — يقابل POST /api/client/bookings.addreview/{bookingId}/review
+  // data: { rating, comment? }
+  addReview: (bookingId, data) =>
+    api.addReview(bookingId, data),
 
-  sendMessage: (data) =>
-    fetch(`${API_URL}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+  // تسجيل حرفي جديد — يقابل POST /api/auth/register/craftsman (multipart/form-data)
+  saveCraftsman: (formData) =>
+    api.registerCraftsman(formData),
 
-  getMessages: (email) =>
-    fetch(`${API_URL}/messages?user=${encodeURIComponent(email)}`).then(handleResponse),
+  // تحديث ملف الحرفي الشخصي — يقابل POST /api/craftsman/profile
+  updateCraftsmanProfile: (formData) =>
+    api.updateCraftsmanProfile(formData),
 
-  saveCraftsman: (data) =>
-    fetch(`${API_URL}/craftsmen`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }).then(handleResponse),
+  // إحصائيات الحرفي — يقابل GET /api/craftsman/stats
+  getCraftsmanStats: () =>
+    api.getCraftsmanStats(),
+
+  // ⚠️ الدوال التالية لا يوجد لها endpoint في الباك حالياً:
+  // - getUsers()          → /admin/users (admin only، مش موثق كامل)
+  // - getPendingCraftsmen() → /admin/craftsmen (admin only)
+  // - verifyCraftsman()   → /admin/craftsmen/{id}/approve (admin only)
+  // - sendMessage()       → غير متاح في الـ API الحالي
+  // - getMessages()       → غير متاح في الـ API الحالي
+  // - getReviews()        → التقييمات بتيجي مع بيانات الحرفي في getCraftsman(id)
 };
 
 export default dataService;

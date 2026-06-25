@@ -36,7 +36,7 @@ const handleResponse = async (res) => {
   }
 
   if (!res.ok) {
-    const message = data.message || 
+    const message = data.message ||
       (data.errors ? Object.values(data.errors).flat().join(" | ") : `خطأ ${res.status}`);
     const error = new Error(message);
     error.errors = data.errors || null;
@@ -53,8 +53,6 @@ const handleResponse = async (res) => {
 // ============================================================
 
 const api = {
-  // ... جميع الدوال الموجودة ...
-  
   // ============================================================
   // ✅ PUBLIC - الحرفيون
   // ============================================================
@@ -78,6 +76,7 @@ const api = {
       if (params.search) query.append("search", params.search);
       if (params.sort_by) query.append("sort_by", params.sort_by);
       if (params.per_page) query.append("per_page", params.per_page);
+      if (params.page) query.append("page", params.page);
       const res = await fetch(
         `${API_URL}/craftsmen.home.search?${query.toString()}`,
         { headers: getHeaders() }
@@ -136,6 +135,15 @@ const api = {
     }
   },
 
+  /**
+   * تسجيل عميل جديد
+   * ⚠️ مهم: يجب الحصول على verified_token أولاً عبر:
+   *   1. api.sendOtp(email)
+   *   2. api.verifyOtp(email, otp, 'register')  →  يرجع verified_token
+   *   3. تمرير verified_token هنا فورًا (صالح 30 دقيقة، يُحذف بعد الاستخدام)
+   *
+   * @param {object} data - { name, email, password, password_confirmation, phone?, verified_token }
+   */
   registerClient: async (data) => {
     try {
       const res = await fetch(`${API_URL}/auth/register/client`, {
@@ -150,6 +158,17 @@ const api = {
     }
   },
 
+  /**
+   * تسجيل حرفي جديد (يدخل قائمة انتظار موافقة الأدمن)
+   * ⚠️ تأكيد الإيميل (verified_token) معطّل حاليًا في هذا الإندبوينت من جهة السيرفر.
+   *
+   * formData المطلوب أن يحتوي على:
+   *   first_name, last_name, email, phone, city,
+   *   password, password_confirmation,
+   *   national_id_front (file), national_id_back (file),
+   *   craft_ids[] (array - أول عنصر يُعتبر is_primary),
+   *   district?, latitude?, longitude?
+   */
   registerCraftsman: async (formData) => {
     try {
       const res = await fetch(`${API_URL}/auth/register/craftsman`, {
@@ -220,6 +239,12 @@ const api = {
   // ============================================================
   // ✅ OTP & VERIFICATION
   // ============================================================
+
+  /**
+   * إرسال كود OTP (6 أرقام، صالح 5 دقائق)
+   * ⚠️ الإندبوينت الحالي يأخذ email فقط (وليس identifier/type/purpose)
+   * @param {string} email
+   */
   sendOtp: async (email) => {
     try {
       const res = await fetch(`${API_URL}/auth/otp/send`, {
@@ -234,6 +259,15 @@ const api = {
     }
   },
 
+  /**
+   * التحقق من كود OTP
+   * @param {string} email
+   * @param {string} otp - 6 أرقام بالضبط
+   * @param {'register'|'password_reset'} purpose
+   *
+   * Response لو purpose = 'register':       { verified: true, verified_token }
+   * Response لو purpose = 'password_reset':  { verified: true, reset_token }
+   */
   verifyOtp: async (email, otp, purpose = 'register') => {
     try {
       const res = await fetch(`${API_URL}/auth/otp/verify`, {
@@ -248,6 +282,10 @@ const api = {
     }
   },
 
+  /**
+   * نسيت كلمة المرور — يرسل كود OTP بالإيميل (نفس آلية sendOtp من الداخل)
+   * Response دايمًا 200 بنفس الرسالة لأسباب أمنية (مفيش تأكيد إذا كان الإيميل موجود أو لا)
+   */
   forgotPassword: async (email) => {
     try {
       const res = await fetch(`${API_URL}/auth/forgot-password`, {
@@ -262,6 +300,13 @@ const api = {
     }
   },
 
+  /**
+   * إعادة تعيين كلمة المرور بالـ reset_token المُرجَع من verifyOtp(purpose: 'password_reset')
+   * الفلو الكامل:
+   *   1. api.forgotPassword(email)
+   *   2. api.verifyOtp(email, otp, 'password_reset')  →  يرجع reset_token
+   *   3. api.resetPasswordWithOtp(reset_token, password, password_confirmation)
+   */
   resetPasswordWithOtp: async (reset_token, password, password_confirmation) => {
     try {
       const res = await fetch(`${API_URL}/auth/reset-password-otp`, {
@@ -291,6 +336,10 @@ const api = {
     }
   },
 
+  /**
+   * @param {object} data - { craftsman_id, service_id?, service_title?, booking_date, booking_time, notes?, location? }
+   * service_id اختياري لكن لو مش موجود فـ service_title مطلوب.
+   */
   createBooking: async (data) => {
     try {
       const res = await fetch(`${API_URL}/client/bookings.store`, {
@@ -317,6 +366,7 @@ const api = {
     }
   },
 
+  // يعمل فقط على حجوزات pending أو confirmed
   cancelBooking: async (id, reason = null) => {
     try {
       const res = await fetch(`${API_URL}/client/bookings.cancel/${id}`, {
@@ -331,6 +381,7 @@ const api = {
     }
   },
 
+  // يعمل فقط على حجوزات completed، ولا يسمح بتقييم مكرر
   addReview: async (bookingId, data) => {
     try {
       const res = await fetch(
@@ -359,20 +410,21 @@ const api = {
       return await handleResponse(res);
     } catch (error) {
       console.warn('⚠️ getCraftsmanStats fallback:', error.message);
-      return {  
-        stats: {  
-          total_earnings: 0,  
-          completed_bookings: 0,  
-          pending_bookings: 0,  
-          cancelled_bookings: 0,  
-          rating: 0,  
-          reviews_count: 0,  
-          is_featured: false  
-        }  
+      return {
+        stats: {
+          total_earnings: 0,
+          completed_bookings: 0,
+          pending_bookings: 0,
+          cancelled_bookings: 0,
+          rating: 0,
+          reviews_count: 0,
+          is_featured: false
+        }
       };
     }
   },
 
+  // 403 لو الحرفي غير approved
   updateCraftsmanProfile: async (formData) => {
     try {
       const res = await fetch(`${API_URL}/craftsman/profile`, {
@@ -399,6 +451,11 @@ const api = {
     }
   },
 
+  /**
+   * @param {number} id
+   * @param {'confirmed'|'in_progress'|'completed'|'rejected'} status
+   * @param {string|null} reason - مطلوب فقط لو status = 'rejected'
+   */
   updateBookingStatus: async (id, status, reason = null) => {
     try {
       const body = { status };
@@ -415,6 +472,9 @@ const api = {
     }
   },
 
+  // ============================================================
+  // ✅ SERVICE POSTS (CRAFTSMAN)
+  // ============================================================
   getServicePosts: async (params = {}) => {
     try {
       const query = new URLSearchParams();
@@ -435,6 +495,11 @@ const api = {
     }
   },
 
+  /**
+   * @param {number} postId
+   * @param {object} data - { message, offered_price?, estimated_days? }
+   * 403 لو الحرفي غير approved. 422 لو رد على نفس المنشور مسبقًا.
+   */
   respondToServicePost: async (postId, data) => {
     try {
       const res = await fetch(
@@ -467,6 +532,8 @@ const api = {
     }
   },
 
+  // formData: title, description, craft_id?, custom_craft?, location?, city?,
+  //           budget_from?, budget_to?, needed_by?, urgency?, images[]?
   createServicePost: async (formData) => {
     try {
       const res = await fetch(`${API_URL}/client/service-posts.store`, {
@@ -493,6 +560,7 @@ const api = {
     }
   },
 
+  // يحول المنشور لحالة closed
   deleteServicePost: async (id) => {
     try {
       const res = await fetch(`${API_URL}/client/service-posts.destroy/${id}`, {
@@ -506,14 +574,24 @@ const api = {
     }
   },
 
+  /**
+   * قبول/رفض رد حرفي على منشور
+   * ⚠️ الباك إند يتوقع x-www-form-urlencoded (وليس JSON) في هذا الإندبوينت بالتحديد
+   * @param {number} postId
+   * @param {number} responseId
+   * @param {'accepted'|'rejected'} status
+   */
   updatePostResponse: async (postId, responseId, status) => {
     try {
       const res = await fetch(
         `${API_URL}/client/service-posts/${postId}/responses/${responseId}`,
         {
           method: "PATCH",
-          headers: getHeaders(),
-          body: JSON.stringify({ status }),
+          headers: {
+            ...getHeaders(),
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({ status }).toString(),
         }
       );
       return await handleResponse(res);
@@ -526,6 +604,13 @@ const api = {
   // ============================================================
   // ✅ UPLOAD
   // ============================================================
+
+  /**
+   * @param {File} file
+   * @param {'avatar'|'profile_photo'|'national_id'|'portfolio'|'post_image'|'chat_file'|'document'} type
+   * الحد الأقصى للحجم يعتمد على type (راجع التوثيق: avatar=2MB, profile_photo/national_id/post_image=5MB,
+   * portfolio=8MB, chat_file/document=10MB)
+   */
   uploadImage: async (file, type = "avatar") => {
     try {
       const formData = new FormData();
@@ -543,7 +628,11 @@ const api = {
     }
   },
 
-  uploadMultiple: async (files, type = "portfolio") => {
+  /**
+   * @param {File[]} files - حتى 10 ملفات
+   * @param {'portfolio'|'post_image'|'chat_file'} type
+   */
+  uploadMultiple: async (files, type = "post_image") => {
     try {
       const formData = new FormData();
       files.forEach((file) => formData.append("files[]", file));
@@ -560,6 +649,7 @@ const api = {
     }
   },
 
+  // file: pdf/doc/docx/xls/xlsx/txt حتى 10MB
   uploadDocument: async (file) => {
     try {
       const formData = new FormData();
@@ -576,6 +666,7 @@ const api = {
     }
   },
 
+  // path مثال: "avatars/abc123.jpg" — يرفض المسارات التي تحتوي على ".." أو تبدأ بـ "/"
   deleteFile: async (path) => {
     try {
       const res = await fetch(`${API_URL}/upload`, {
@@ -587,6 +678,26 @@ const api = {
     } catch (error) {
       console.warn('⚠️ deleteFile error:', error.message);
       throw error;
+    }
+  },
+
+  // ============================================================
+  // ✅ REVIEWS
+  // ============================================================
+
+  /**
+   * جلب كل التقييمات — GET /api/auth/reviews
+   * Response: { data: [ { id, booking_id, client_id, craftsman_id, rating, comment, is_visible, created_at, client, craftsman } ] }
+   */
+  getReviews: async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/reviews`, {
+        headers: getHeaders(),
+      });
+      return await handleResponse(res);
+    } catch (error) {
+      console.warn('⚠️ getReviews fallback:', error.message);
+      return { data: [] };
     }
   },
 
@@ -660,6 +771,7 @@ const api = {
     }
   },
 
+  // يحذف فقط الإشعارات المقروءة
   clearAllNotifications: async () => {
     try {
       const res = await fetch(`${API_URL}/notifications`, {

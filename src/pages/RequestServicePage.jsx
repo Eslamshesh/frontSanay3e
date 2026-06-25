@@ -58,6 +58,7 @@ const RequestServicePage = () => {
 
   const [images, setImages] = useState([]);
   const [showCustomService, setShowCustomService] = useState(false);
+  const [crafts, setCrafts] = useState([]); // ✅ قائمة المهن من الباك
 
   // Language
   useEffect(() => {
@@ -66,6 +67,13 @@ const RequestServicePage = () => {
     const handleLanguageChange = () => setLang(localStorage.getItem('language') || 'ar');
     window.addEventListener('languagechange', handleLanguageChange);
     return () => window.removeEventListener('languagechange', handleLanguageChange);
+  }, []);
+
+  // ✅ جلب المهن من الباك عشان نربط craft_id بالاختيار الفعلي
+  useEffect(() => {
+    api.getCrafts().then(data => {
+      setCrafts(data.crafts || []);
+    }).catch(() => setCrafts([]));
   }, []);
 
   const handleChange = (e) => {
@@ -148,7 +156,14 @@ const RequestServicePage = () => {
       formDataToSend.append('budget_from', formData.budget || 0);
       formDataToSend.append('budget_to', formData.budget || 0);
       formDataToSend.append('urgency', formData.urgency || 'medium');
-      formDataToSend.append('craft_id', 1); // مؤقتاً
+      // ✅ نطابق اسم الخدمة المختارة مع الـ crafts من الباك
+      const matchedCraft = crafts.find(c => 
+        c.name === service || service.includes(c.name) || c.name.includes(service)
+      );
+      if (matchedCraft) {
+        formDataToSend.append('craft_id', matchedCraft.id);
+      }
+      // لو مفيش تطابق، نبعت بدون craft_id والباك هيتعامل معاه كـ custom_craft
       
       if (formData.district) formDataToSend.append('custom_location', formData.district);
 
@@ -163,36 +178,8 @@ const RequestServicePage = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (error) {
-      console.warn('⚠️ Service post error, using fallback:', error);
-      
-      // ✅ Fallback - حفظ في localStorage
-      const service = showCustomService ? formData.customService : formData.serviceType;
-      const requestData = {
-        id: Date.now(),
-        service_type: service,
-        description: formData.description,
-        location: `${formData.city} - ${formData.district}`,
-        city: formData.city,
-        district: formData.district,
-        address: formData.address,
-        budget: parseFloat(formData.budget),
-        date: formData.date,
-        time: formData.time,
-        customer_name: formData.name,
-        customer_phone: formData.phone,
-        customer_email: formData.email,
-        urgency: formData.urgency,
-        images_count: images.length,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-      };
-
-      const requests = JSON.parse(localStorage.getItem('requests') || '[]');
-      requests.push(requestData);
-      localStorage.setItem('requests', JSON.stringify(requests));
-      
-      setSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      console.error('❌ Service post error:', error);
+      setError(error.message || (lang === 'ar' ? 'حدث خطأ في إرسال الطلب، حاول مرة أخرى' : 'Error submitting request, please try again'));
     }
     
     setSubmitting(false);

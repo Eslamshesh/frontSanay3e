@@ -6,7 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import notificationService from '../../services/notificationService';
 import { 
   Wrench, Moon, Sun, Globe, Download, LogOut, Bell, 
-  Search, Star, LayoutDashboard, Calendar 
+  Search, Star, LayoutDashboard, Calendar, FileText
 } from 'lucide-react';
 
 const Header = () => {
@@ -120,6 +120,8 @@ const Header = () => {
     notifications: lang === 'ar' ? 'الإشعارات' : 'Notifications',
     dashboard: lang === 'ar' ? 'لوحة التحكم' : 'Dashboard',
     myBookings: lang === 'ar' ? 'حجوزاتي' : 'My Bookings',
+    myPosts: lang === 'ar' ? 'منشوراتي' : 'My Posts',
+    servicePosts: lang === 'ar' ? 'طلبات الخدمة' : 'Service Requests',
   };
 
   const headerBg = darkMode ? (scrolled ? 'rgba(15, 23, 42, 0.98)' : '#0f172a') : (scrolled ? 'rgba(255, 255, 255, 0.98)' : '#ffffff');
@@ -175,6 +177,22 @@ const Header = () => {
             <Link to="/my-bookings" style={navLinkStyle(isActive('/my-bookings'), darkMode)}>
               <Calendar size={14} style={{ display: 'inline', marginLeft: '4px' }} />
               {t.myBookings}
+            </Link>
+          )}
+
+          {/* ✅ منشوراتي للعميل */}
+          {isCustomer && (
+            <Link to="/my-posts" style={navLinkStyle(isActive('/my-posts'), darkMode)}>
+              <FileText size={14} style={{ display: 'inline', marginLeft: '4px' }} />
+              {t.myPosts}
+            </Link>
+          )}
+
+          {/* ✅ طلبات الخدمة للحرفي */}
+          {isCraftsman && (
+            <Link to="/craftsman/posts" style={navLinkStyle(isActive('/craftsman/posts'), darkMode)}>
+              <FileText size={14} style={{ display: 'inline', marginLeft: '4px' }} />
+              {t.servicePosts}
             </Link>
           )}
 

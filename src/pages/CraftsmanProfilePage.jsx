@@ -1,3 +1,4 @@
+
 // src/pages/CraftsmanProfilePage.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
@@ -97,17 +98,8 @@ const CraftsmanProfilePage = () => {
           if (u.avatar_url) setAvatar(u.avatar_url);
         }
       } catch (error) {
-        console.warn('⚠️ Using fallback data:', error);
-        const savedProfile = localStorage.getItem('craftsmanProfile');
-        if (savedProfile) {
-          try { setProfile(prev => ({ ...prev, ...JSON.parse(savedProfile) })); } catch {}
-        }
-        const savedAvatar = localStorage.getItem('craftsmanAvatar');
-        if (savedAvatar) setAvatar(savedAvatar);
-        const savedPortfolio = localStorage.getItem('craftsmanPortfolio');
-        if (savedPortfolio) {
-          try { setPortfolioImages(JSON.parse(savedPortfolio)); } catch {}
-        }
+        console.error('❌ Error loading profile:', error);
+        setError(error.message || 'حدث خطأ في تحميل بيانات الملف الشخصي');
       }
       setLoading(false);
     };
@@ -251,7 +243,8 @@ const CraftsmanProfilePage = () => {
       
       const newImages = (data.uploads || data.images || []).map(img => ({
         id: img.id || Date.now() + Math.random(),
-        url: img.url || img.path,
+        url: img.url,
+        path: img.path, // ✅ مطلوب لـ api.deleteFile لو الصورة اتحذفت
         name: img.name || 'صورة',
         date: new Date().toISOString(),
       }));
@@ -324,7 +317,7 @@ const CraftsmanProfilePage = () => {
     } catch (error) {
       console.error('❌ Save error:', error);
       setError(error.message || 'حدث خطأ في حفظ التغييرات');
-      localStorage.setItem('craftsmanProfile', JSON.stringify(profile));
+      // ✅ البيانات محفوظة في الباك — مش محتاجين localStorage
     }
     setLoading(false);
   };
@@ -333,19 +326,24 @@ const CraftsmanProfilePage = () => {
   // ✅ حذف صورة من المعرض
   // ============================================================
   const removePortfolioImage = async (id) => {
+    // ✅ نحذف الصورة باستخدام api.deleteFile(path)
+    // الـ id المخزن في portfolioImages هو الـ path من الباك (مثال: "portfolio/img.jpg")
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      await api.deletePortfolioImage(id);
-      setPortfolioImages(prev => prev.filter(img => img.id !== id));
+      const img = portfolioImages.find(i => i.id === id);
+      if (img?.path) {
+        await api.deleteFile(img.path);
+      }
+      setPortfolioImages(prev => prev.filter(i => i.id !== id));
       setSuccess('تم حذف الصورة بنجاح');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
       console.error('❌ Error deleting portfolio image:', error);
       // Fallback - حذف محلي
-      setPortfolioImages(prev => prev.filter(img => img.id !== id));
+      setPortfolioImages(prev => prev.filter(i => i.id !== id));
     }
     setLoading(false);
   };
@@ -399,6 +397,7 @@ const CraftsmanProfilePage = () => {
   // ============================================================
   // ✅ حذف الحساب
   // ============================================================
+  // ⚠️ حذف الحساب غير متاح في الـ API حالياً — يتم تسجيل الخروج فقط
   const handleDeleteAccount = async () => {
     if (!window.confirm(t.deleteWarning)) return;
     
@@ -406,12 +405,14 @@ const CraftsmanProfilePage = () => {
     setError('');
     
     try {
-      await api.deleteAccount();
+      // نسجل الخروج أولاً (DELETE /api/auth/logout)
+      await api.logout();
       logout();
       navigate('/');
     } catch (error) {
-      setError(error.message || 'حدث خطأ في حذف الحساب');
-      setLoading(false);
+      // حتى لو فشل الـ logout من الباك، نعمل logout محلي
+      logout();
+      navigate('/');
     }
   };
 
