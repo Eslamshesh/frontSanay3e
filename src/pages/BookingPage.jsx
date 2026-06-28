@@ -1368,6 +1368,429 @@
 
 // export default BookingPage;
 // src/pages/BookingPage.jsx
+// import React, { useState, useEffect } from 'react';
+// import { useParams, useNavigate } from 'react-router-dom';
+// import { useTheme } from '../context/ThemeContext';
+// import { useAuth } from '../context/AuthContext';
+// import api from '../services/api';
+// import {
+//   Calendar, Clock, MapPin, Star, FileText,
+//   CheckCircle, Loader, AlertCircle, Wrench,
+//   ChevronLeft, ChevronRight, User
+// } from 'lucide-react';
+
+// const timeSlots = [
+//   '08:00', '09:00', '10:00', '11:00', '12:00',
+//   '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00',
+// ];
+
+// const BookingPage = () => {
+//   const { id } = useParams();
+//   const navigate = useNavigate();
+//   const { darkMode } = useTheme();
+//   const { user } = useAuth();
+//   const [lang, setLang] = useState('ar');
+
+//   // Craftsman data
+//   const [craftsman, setCraftsman] = useState(null);
+//   const [loading, setLoading] = useState(true);
+//   const [error, setError] = useState('');
+
+//   // Form fields — يتطابق مع API schema
+//   const [serviceTitle, setServiceTitle] = useState('');
+//   const [date, setDate] = useState('');
+//   const [time, setTime] = useState('');
+//   const [notes, setNotes] = useState('');
+//   const [bookingLocation, setBookingLocation] = useState('');
+//   const [serviceId, setServiceId] = useState('');
+
+//   // UI state
+//   const [submitting, setSubmitting] = useState(false);
+//   const [confirmed, setConfirmed] = useState(false);
+//   const [bookingResult, setBookingResult] = useState(null);
+
+//   const isArabic = lang === 'ar';
+//   const today = new Date().toISOString().split('T')[0];
+
+//   // Language
+//   useEffect(() => {
+//     const saved = localStorage.getItem('language') || 'ar';
+//     setLang(saved);
+//     const h = () => setLang(localStorage.getItem('language') || 'ar');
+//     window.addEventListener('languagechange', h);
+//     return () => window.removeEventListener('languagechange', h);
+//   }, []);
+
+//   // Load craftsman
+//   useEffect(() => {
+//     const load = async () => {
+//       setLoading(true);
+//       setError('');
+//       try {
+//         const data = await api.getCraftsman(id);
+//         const c = data.craftsman || data;
+//         setCraftsman({
+//           id: c.id,
+//           name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'حرفي',
+//           avatar_url: c.avatar_url || null,
+//           rating: parseFloat(c.rating || 0),
+//           reviews_count: c.reviews_count || 0,
+//           city: c.city || '',
+//           district: c.district || '',
+//           bio: c.bio || '',
+//           is_verified: c.is_verified || false,
+//           crafts: c.crafts || [],
+//           completed_bookings: c.completed_bookings || 0,
+//           hourly_rate: c.hourly_rate || null,
+//         });
+//         // نعبي service_title تلقائياً بالتخصص الأول
+//         if (c.crafts?.[0]?.name) setServiceTitle(c.crafts[0].name);
+//         setBookingLocation(`${c.city || ''} ${c.district || ''}`.trim());
+//       } catch (err) {
+//         setError(err.message || (isArabic ? 'حدث خطأ في تحميل بيانات الحرفي' : 'Error loading craftsman'));
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+//     load();
+//   }, [id]);
+
+//   const handleSubmit = async () => {
+//     // Validate
+//     if (!serviceTitle.trim()) {
+//       setError(isArabic ? 'يرجى كتابة نوع الخدمة المطلوبة' : 'Please enter the service type');
+//       return;
+//     }
+//     if (!date) {
+//       setError(isArabic ? 'يرجى اختيار التاريخ' : 'Please select a date');
+//       return;
+//     }
+//     if (!time) {
+//       setError(isArabic ? 'يرجى اختيار الوقت' : 'Please select a time');
+//       return;
+//     }
+
+//     setError('');
+//     setSubmitting(true);
+
+//     try {
+//       // ✅ يتطابق مع API schema بالضبط
+//       const bookingData = {
+//         craftsman_id: parseInt(id),
+//         service_title: serviceTitle.trim(),
+//         booking_date: date,
+//         booking_time: time,
+//         ...(notes.trim() && { notes: notes.trim() }),
+//         ...(bookingLocation.trim() && { location: bookingLocation.trim() }),
+//         ...(serviceId && { service_id: serviceId }),
+//       };
+
+//       const data = await api.createBooking(bookingData);
+//       setBookingResult(data);
+//       setConfirmed(true);
+//     } catch (err) {
+//       if (err.errors) {
+//         setError(Object.values(err.errors).flat().join(' | '));
+//       } else {
+//         setError(err.message || (isArabic ? 'حدث خطأ في إنشاء الحجز' : 'Booking failed'));
+//       }
+//     } finally {
+//       setSubmitting(false);
+//     }
+//   };
+
+//   // =========== Styles ===========
+//   const bg = darkMode ? '#0f172a' : '#f8fafc';
+//   const card = darkMode ? '#1e293b' : '#ffffff';
+//   const border = darkMode ? '#334155' : '#e2e8f0';
+//   const text = darkMode ? '#f1f5f9' : '#0f172a';
+//   const sub = darkMode ? '#94a3b8' : '#64748b';
+//   const inputBg = darkMode ? '#0f172a' : '#f8fafc';
+//   const accent = '#2563eb';
+
+//   const inputStyle = {
+//     width: '100%', boxSizing: 'border-box',
+//     padding: '12px 14px', borderRadius: 10,
+//     border: `1.5px solid ${border}`,
+//     background: inputBg, color: text,
+//     fontSize: 15, fontFamily: 'Cairo, sans-serif',
+//     outline: 'none', transition: 'border-color 0.2s',
+//     direction: isArabic ? 'rtl' : 'ltr',
+//   };
+
+//   const labelStyle = {
+//     display: 'block', fontWeight: 600,
+//     fontSize: 14, color: text, marginBottom: 8,
+//   };
+
+//   // =========== Loading ===========
+//   if (loading) return (
+//     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg }}>
+//       <Loader size={36} style={{ color: accent, animation: 'spin 1s linear infinite' }} />
+//       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+//     </div>
+//   );
+
+//   // =========== Error loading ===========
+//   if (error && !craftsman) return (
+//     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, padding: 24 }}>
+//       <div style={{ background: card, borderRadius: 16, padding: 32, maxWidth: 400, width: '100%', textAlign: 'center', border: `1px solid ${border}` }}>
+//         <AlertCircle size={48} style={{ color: '#ef4444', marginBottom: 16 }} />
+//         <p style={{ color: text, marginBottom: 20 }}>{error}</p>
+//         <button onClick={() => navigate(-1)} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', cursor: 'pointer', fontFamily: 'Cairo, sans-serif', fontWeight: 600 }}>
+//           {isArabic ? 'رجوع' : 'Go Back'}
+//         </button>
+//       </div>
+//     </div>
+//   );
+
+//   // =========== Success ===========
+//   if (confirmed) return (
+//     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, padding: 24, fontFamily: 'Cairo, sans-serif', direction: isArabic ? 'rtl' : 'ltr' }}>
+//       <div style={{ background: card, borderRadius: 20, padding: '48px 36px', maxWidth: 480, width: '100%', textAlign: 'center', border: `1px solid ${border}` }}>
+//         <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #059669, #10b981)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+//           <CheckCircle size={40} color="white" />
+//         </div>
+//         <h2 style={{ fontSize: 22, fontWeight: 700, color: '#059669', marginBottom: 8 }}>
+//           {isArabic ? 'تم إرسال طلب الحجز ✅' : 'Booking Request Sent ✅'}
+//         </h2>
+//         <p style={{ color: sub, marginBottom: 24, lineHeight: 1.7 }}>
+//           {isArabic
+//             ? `سيتواصل معك ${craftsman?.name} لتأكيد الموعد`
+//             : `${craftsman?.name} will contact you to confirm`}
+//         </p>
+
+//         <div style={{ background: darkMode ? 'rgba(37,99,235,0.1)' : '#eff6ff', borderRadius: 12, padding: 16, marginBottom: 24, textAlign: isArabic ? 'right' : 'left' }}>
+//           {[
+//             { label: isArabic ? 'الخدمة' : 'Service', value: serviceTitle },
+//             { label: isArabic ? 'التاريخ' : 'Date', value: new Date(date).toLocaleDateString(isArabic ? 'ar-EG' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) },
+//             { label: isArabic ? 'الوقت' : 'Time', value: time },
+//             ...(bookingLocation ? [{ label: isArabic ? 'الموقع' : 'Location', value: bookingLocation }] : []),
+//           ].map((row, i) => (
+//             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 2 ? `1px solid ${border}` : 'none' }}>
+//               <span style={{ color: sub, fontSize: 13 }}>{row.label}</span>
+//               <span style={{ color: text, fontWeight: 600, fontSize: 13 }}>{row.value}</span>
+//             </div>
+//           ))}
+//         </div>
+
+//         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+//           <button onClick={() => navigate('/my-bookings')} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 10, padding: '11px 28px', fontWeight: 700, cursor: 'pointer', fontFamily: 'Cairo, sans-serif', fontSize: 14 }}>
+//             {isArabic ? 'حجوزاتي' : 'My Bookings'}
+//           </button>
+//           <button onClick={() => navigate('/')} style={{ background: 'transparent', color: text, border: `1.5px solid ${border}`, borderRadius: 10, padding: '11px 24px', fontWeight: 600, cursor: 'pointer', fontFamily: 'Cairo, sans-serif', fontSize: 14 }}>
+//             {isArabic ? 'الرئيسية' : 'Home'}
+//           </button>
+//         </div>
+//       </div>
+//       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+//     </div>
+//   );
+
+//   // =========== Main Form ===========
+//   return (
+//     <div style={{ minHeight: '100vh', background: bg, fontFamily: 'Cairo, sans-serif', direction: isArabic ? 'rtl' : 'ltr', color: text }}>
+//       <style>{`
+//         @keyframes spin { to { transform: rotate(360deg); } }
+//         .input-focus:focus { border-color: ${accent} !important; }
+//         .time-btn:hover { border-color: ${accent} !important; color: ${accent} !important; }
+//         .time-btn.selected { background: ${accent} !important; color: white !important; border-color: ${accent} !important; }
+//       `}</style>
+
+//       {/* Header */}
+//       <div style={{ background: `linear-gradient(135deg, #1d4ed8, #2563eb)`, color: 'white', padding: '28px 0 24px' }}>
+//         <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 20px' }}>
+//           <button onClick={() => navigate(-1)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '6px 14px', color: 'white', cursor: 'pointer', fontSize: 13, fontFamily: 'Cairo, sans-serif', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>
+//             {isArabic ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+//             {isArabic ? 'رجوع' : 'Back'}
+//           </button>
+//           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
+//             {isArabic ? 'تفاصيل الحجز' : 'Booking Details'}
+//           </h1>
+//           <p style={{ opacity: 0.85, fontSize: 14, marginTop: 4 }}>
+//             {isArabic ? 'اكمل البيانات لإرسال طلب الحجز' : 'Fill in the details to send your booking request'}
+//           </p>
+//         </div>
+//       </div>
+
+//       <div style={{ maxWidth: 720, margin: '0 auto', padding: '28px 20px' }}>
+
+//         {/* Craftsman Card */}
+//         {craftsman && (
+//           <div style={{ background: card, borderRadius: 16, border: `1px solid ${border}`, padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'center' }}>
+//             <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+//               {craftsman.avatar_url
+//                 ? <img src={craftsman.avatar_url} alt={craftsman.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+//                 : <User size={26} color="white" />}
+//             </div>
+//             <div style={{ flex: 1 }}>
+//               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+//                 <span style={{ fontWeight: 700, fontSize: 16 }}>{craftsman.name}</span>
+//                 {craftsman.is_verified && (
+//                   <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>✓ {isArabic ? 'موثق' : 'Verified'}</span>
+//                 )}
+//               </div>
+//               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+//                 {craftsman.crafts?.length > 0 && (
+//                   <span style={{ color: accent, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+//                     <Wrench size={13} /> {craftsman.crafts.map(c => c.name).join(', ')}
+//                   </span>
+//                 )}
+//                 {craftsman.rating > 0 && (
+//                   <span style={{ color: '#f59e0b', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+//                     <Star size={13} fill="#f59e0b" /> {craftsman.rating.toFixed(1)}
+//                     {craftsman.reviews_count > 0 && <span style={{ color: sub }}>({craftsman.reviews_count})</span>}
+//                   </span>
+//                 )}
+//                 {craftsman.city && (
+//                   <span style={{ color: sub, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+//                     <MapPin size={13} /> {craftsman.city}
+//                   </span>
+//                 )}
+//               </div>
+//             </div>
+//           </div>
+//         )}
+
+//         {/* Error */}
+//         {error && (
+//           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 16px', marginBottom: 20, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+//             <AlertCircle size={16} />
+//             {error}
+//           </div>
+//         )}
+
+//         {/* Form */}
+//         <div style={{ background: card, borderRadius: 16, border: `1px solid ${border}`, padding: '28px 24px' }}>
+
+//           {/* Service Title */}
+//           <div style={{ marginBottom: 22 }}>
+//             <label style={labelStyle}>
+//               <Wrench size={14} style={{ display: 'inline', marginLeft: 6, marginRight: 6 }} />
+//               {isArabic ? 'نوع الخدمة المطلوبة *' : 'Required Service *'}
+//             </label>
+//             <input
+//               className="input-focus"
+//               value={serviceTitle}
+//               onChange={e => setServiceTitle(e.target.value)}
+//               placeholder={isArabic ? 'مثال: تركيب باب، صيانة كهرباء...' : 'e.g. Door installation, electrical repair...'}
+//               style={inputStyle}
+//             />
+//             {craftsman?.crafts?.length > 1 && (
+//               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+//                 {craftsman.crafts.map(c => (
+//                   <button key={c.id} onClick={() => setServiceTitle(c.name)}
+//                     style={{ background: serviceTitle === c.name ? accent : 'transparent', color: serviceTitle === c.name ? '#fff' : sub, border: `1px solid ${border}`, borderRadius: 20, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontFamily: 'Cairo, sans-serif' }}>
+//                     {c.name}
+//                   </button>
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+
+//           {/* Date */}
+//           <div style={{ marginBottom: 22 }}>
+//             <label style={labelStyle}>
+//               <Calendar size={14} style={{ display: 'inline', marginLeft: 6, marginRight: 6 }} />
+//               {isArabic ? 'تاريخ الحجز *' : 'Booking Date *'}
+//             </label>
+//             <input
+//               className="input-focus"
+//               type="date"
+//               value={date}
+//               onChange={e => setDate(e.target.value)}
+//               min={today}
+//               style={inputStyle}
+//             />
+//           </div>
+
+//           {/* Time Slots */}
+//           <div style={{ marginBottom: 22 }}>
+//             <label style={labelStyle}>
+//               <Clock size={14} style={{ display: 'inline', marginLeft: 6, marginRight: 6 }} />
+//               {isArabic ? 'وقت الحجز *' : 'Booking Time *'}
+//             </label>
+//             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))', gap: 8 }}>
+//               {timeSlots.map(slot => (
+//                 <button
+//                   key={slot}
+//                   className={`time-btn${time === slot ? ' selected' : ''}`}
+//                   onClick={() => setTime(slot)}
+//                   style={{
+//                     padding: '9px 4px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+//                     border: `1.5px solid ${time === slot ? accent : border}`,
+//                     background: time === slot ? accent : inputBg,
+//                     color: time === slot ? '#fff' : text,
+//                     cursor: 'pointer', fontFamily: 'Cairo, sans-serif',
+//                     transition: 'all 0.15s',
+//                   }}
+//                 >
+//                   {slot}
+//                 </button>
+//               ))}
+//             </div>
+//           </div>
+
+//           {/* Location */}
+//           <div style={{ marginBottom: 22 }}>
+//             <label style={labelStyle}>
+//               <MapPin size={14} style={{ display: 'inline', marginLeft: 6, marginRight: 6 }} />
+//               {isArabic ? 'موقع الخدمة' : 'Service Location'}
+//               <span style={{ color: sub, fontWeight: 400, fontSize: 12, marginRight: 4, marginLeft: 4 }}>({isArabic ? 'اختياري' : 'optional'})</span>
+//             </label>
+//             <input
+//               className="input-focus"
+//               value={bookingLocation}
+//               onChange={e => setBookingLocation(e.target.value)}
+//               placeholder={isArabic ? 'العنوان بالتفصيل...' : 'Detailed address...'}
+//               style={inputStyle}
+//             />
+//           </div>
+
+//           {/* Notes */}
+//           <div style={{ marginBottom: 28 }}>
+//             <label style={labelStyle}>
+//               <FileText size={14} style={{ display: 'inline', marginLeft: 6, marginRight: 6 }} />
+//               {isArabic ? 'ملاحظات إضافية' : 'Additional Notes'}
+//               <span style={{ color: sub, fontWeight: 400, fontSize: 12, marginRight: 4, marginLeft: 4 }}>({isArabic ? 'اختياري' : 'optional'})</span>
+//             </label>
+//             <textarea
+//               className="input-focus"
+//               value={notes}
+//               onChange={e => setNotes(e.target.value)}
+//               placeholder={isArabic ? 'أي تفاصيل إضافية تساعد الحرفي...' : 'Any extra details that help the craftsman...'}
+//               rows={3}
+//               style={{ ...inputStyle, resize: 'vertical' }}
+//             />
+//           </div>
+
+//           {/* Submit Button */}
+//           <button
+//             onClick={handleSubmit}
+//             disabled={submitting}
+//             style={{
+//               width: '100%', padding: '14px', borderRadius: 12,
+//               background: submitting ? '#93c5fd' : accent,
+//               color: '#fff', border: 'none', fontWeight: 700,
+//               fontSize: 16, cursor: submitting ? 'not-allowed' : 'pointer',
+//               fontFamily: 'Cairo, sans-serif',
+//               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+//               transition: 'background 0.2s',
+//             }}
+//           >
+//             {submitting
+//               ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> {isArabic ? 'جاري الإرسال...' : 'Sending...'}</>
+//               : <><CheckCircle size={18} /> {isArabic ? 'تأكيد الحجز' : 'Confirm Booking'}</>
+//             }
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default BookingPage;
+// src/pages/BookingPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
